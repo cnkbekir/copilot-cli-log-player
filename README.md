@@ -22,6 +22,7 @@ Copilot'ın "nasıl çalıştığını" anlatan şemalar genelde temsilîdir. Oy
 
 - **Üstte akış, altta gerçek metin.** Sütun başlıkları sabit; her adımda alt panelde logda ne yazıyorsa o görünür.
 - **LLM'e giden mesajın kendisi.** Her LLM çağrısında modele giden mesaj listesi sırasıyla gösterilir; o çağrıda yeni eklenenler sarıyla işaretlenir.
+- **Önbellek ve kredi.** Her çağrıda girdinin ne kadarının önbellekten okunduğu, çağrının AIU maliyeti ve prompt başına premium istek sayısı.
 - **Token dökümü.** Girdinin ne kadarı sistem prompt'u, ne kadarı araç tanımları, ne kadarı konuşma geçmişi; sistem prompt'unun bölümleri (copilot-instructions.md, AGENTS.md, skill listesi…).
 - **5 seviye, basitten zora.** Seviye değiştirince aynı adımda kalırsınız; ayrıntı açılır veya kapanır.
 - **Sunum modu.** Tam ekran, büyük yazı, açık/koyu tema, alt paneli gizleme.
@@ -78,7 +79,7 @@ egitim.html#ornek=3&seviye=4&adim=8&panel=0&tema=light&sunum=1
 |---|---|---|
 | 1 · LLM ile konuşma | Geliştirici, Copilot CLI, LLM | İstek → LLM → yanıt. Sistem prompt'u tek satır "gizli talimatlar" olarak görünür. |
 | 2 · Araç döngüsü | + Araçlar | tool_call → araç → sonuç → tekrar LLM. Skill / VS Code / MCP araçları da "Araçlar" sütununda. |
-| 3 · Bağlam | (aynı) | Token çubuğu, önbellek (cache) kullanımı, sistem prompt'unun bölümleri, CLI'ın prompt'a eklediği metinler, modelin düşünce özeti |
+| 3 · Bağlam | (aynı) | Token çubuğu, önbellek (cache) kullanımı, kredi (AIU) maliyeti, sistem prompt'unun bölümleri, CLI'ın prompt'a eklediği metinler, modelin düşünce özeti |
 | 4 · Skill & MCP | + Skill, VS Code, MCP | SKILL.md'nin yüklenmesi, `tool_search_tool`, MCP sunucusu |
 | 5 · Hooks & dahası | + Hooks, Yan LLM | Tüm hook'lar (girdi/çıktı), ana modelden ayrı çalışan küçük modeller |
 
@@ -106,6 +107,8 @@ Bir satıra tıklamak o adıma gider; alt paneldeki uzun metin kutularına tıkl
 |---|---|
 | Bir çağrının toplam girdi/çıktı token'ı, önbellekten okunan ve önbelleğe yazılan token | Ölçülmüş (`session.usage_record`) |
 | Araç tanımlarının token'ı ve araç sayısı | Ölçülmüş (`toolTokenCount`, `availableToolCount`) |
+| Bir çağrının maliyeti (AIU), token türüne göre birim fiyatlar | Ölçülmüş (`copilotUsage.totalNanoAiu`, `tokenDetails`); 1 AIU = 10⁹ nanoAIU |
+| Prompt başına premium istek | Ölçülmüş (`session.usage_checkpoint` farkı) |
 | Sistem prompt'unun token karşılığı | Hesaplanmış: ilk LLM çağrısının araç dışı girdisi |
 | Sistem prompt'u bölümleri, tek tek mesajların token'ı | **Tahmin:** karakter sayısı × logdan çıkarılan karakter/token oranı |
 

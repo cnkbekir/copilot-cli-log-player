@@ -117,6 +117,13 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--soft);b
 .bar{display:flex;height:26px;border-radius:7px;overflow:hidden;border:1px solid var(--line);margin:6px 0 4px}
 .bar div{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--on-c);white-space:nowrap;overflow:hidden;min-width:2px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted)}
+.ktable{border-collapse:collapse;font-size:14px;margin-top:4px;font-variant-numeric:tabular-nums}
+.ktable th,.ktable td{padding:5px 14px 5px 0;border-bottom:1px solid var(--line);text-align:left;font-weight:normal}
+.ktable thead th{color:var(--muted);font-size:12.5px}
+.ktable tbody th{color:var(--muted)}
+.ktable td:nth-child(2),.ktable td:nth-child(3),.ktable td:nth-child(4){text-align:right}
+.ktable td:last-child{width:160px}
+.kbar{display:block;height:8px;border-radius:4px;background:var(--c-cloud);min-width:2px}
 .note{margin:6px 0 0;font-size:13.5px;color:var(--muted);max-width:980px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .msgs{display:grid;gap:6px;margin-top:8px}
@@ -292,6 +299,30 @@ function cacheBlock(b){
     el("div",{class:"legend"},...parts.map(([n,v,c])=>el("span",{},el("i",{style:`background:${c}`}),`${n}: ${fmt(v)} token`))),
     el("p",{class:"note"},yorum));
 }
+// Kredi: bu çağrının maliyeti token türüne göre (birimler logdaki gibi: 1 AIU = 10⁹ nanoAIU)
+const aiu = n => (n/1e9).toLocaleString("tr-TR",{minimumFractionDigits:3,maximumFractionDigits:3});
+function krediBlock(k){
+  const max=Math.max(...k.satirlar.map(s=>s.tutar),1);
+  return el("div",{class:"block"},
+    el("div",{class:"t"},`Bu çağrının maliyeti: ${aiu(k.toplam)} AIU`),
+    el("table",{class:"ktable"},
+      el("thead",{},el("tr",{},el("th",{},"Token türü"),el("th",{},"Token"),el("th",{},"Birim fiyat"),el("th",{},"Tutar (AIU)"),el("th",{"aria-hidden":"true"},""))),
+      el("tbody",{},...k.satirlar.map(s=>el("tr",{},
+        el("td",{},s.tur), el("td",{},fmt(s.token)), el("td",{},`${fmt(s.birim)} nanoAIU`), el("td",{},aiu(s.tutar)),
+        el("td",{"aria-hidden":"true"},el("span",{class:"kbar",style:`width:${Math.round(100*s.tutar/max)}%`})))))),
+    krediNot(k));
+}
+function krediNot(k){
+  const b=t=>k.satirlar.find(s=>s.tur===t)?.birim;
+  const girdi=b("Önbelleksiz girdi"), okuma=b("Önbellekten okuma");
+  if(!girdi||!okuma) return null;
+  const kat=(girdi/okuma).toLocaleString("tr-TR",{maximumFractionDigits:1});
+  return el("p",{class:"note"},`Önbellekten okumak, önbelleksiz girdiden ${kat} kat ucuz. Bu yüzden ilk çağrıdan sonra, bağlam büyüse de çağrılar çok daha ucuza gelir.`);
+}
+function ozetBlock(b){
+  return el("div",{class:"block"},el("div",{class:"t"},b.etiket),
+    el("table",{class:"ktable"},el("tbody",{},...b.satirlar.map(([k,v])=>el("tr",{},el("th",{scope:"row"},k),el("td",{},v))))));
+}
 function contextBlock(b){
   const wrap=el("div",{class:"block"});
   if(st.lvl>=3){
@@ -302,6 +333,7 @@ function contextBlock(b){
       el("div",{class:"bar",role:"img","aria-label":parts.map(([n,v])=>`${n} ${fmt(v)} token`).join(", ")},...parts.map(([n,v,c])=>el("div",{style:`flex:${Math.max(v,1)};background:${c}`,title:`${n}: ${fmt(v)}`},v/b.toplam>.12?`${n} ${fmt(v)}`:""))),
       el("div",{class:"legend"},...parts.map(([n,v,c])=>el("span",{},el("i",{style:`background:${c}`}),`${n}: ${fmt(v)} token (%${(100*v/b.toplam).toFixed(1)})`)))));
     if(b.yazilan!=null) wrap.append(cacheBlock(b));
+    if(b.kredi) wrap.append(krediBlock(b.kredi));
     const det=el("details",{},el("summary",{},`Sistem prompt'unun içi (her çağrıda aynı, ≈${fmt(b.sistem)} token) ve ${b.arac_sayisi} araç tanımı (${fmt(b.araclar)} token)`),
       el("div",{class:"sections"},...b.sistem_bolumleri.slice(0,14).map(x=>el("span",{},el("em",{},x.ad),`≈${fmt(x.token)}`))));
     wrap.append(det);
@@ -324,7 +356,7 @@ function contextBlock(b){
   wrap.append(msgs);
   return wrap;
 }
-function renderBlock(b){ return b.tur==="baglam" ? contextBlock(b) : textBlock(b); }
+function renderBlock(b){ return b.tur==="baglam" ? contextBlock(b) : b.tur==="ozet" ? ozetBlock(b) : textBlock(b); }
 // "Tümünü aç": tercih adımlar arasında korunur; her yeni adımda kutular buna göre açılır
 function applyTumu(P){
   P.querySelectorAll(".msg pre:not(.kisa)").forEach(p=>{ p.classList.toggle("open",!!ui.tumuAcik); p.setAttribute("aria-expanded",String(!!ui.tumuAcik)); });

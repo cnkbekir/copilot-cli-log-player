@@ -28,6 +28,24 @@ def args_str(a):
     return a if isinstance(a, str) else json.dumps(a, ensure_ascii=False, indent=2)
 
 
+KREDI_TUR = {"input": "Önbelleksiz girdi", "cache_read": "Önbellekten okuma",
+             "cache_write": "Önbelleğe yazma", "output": "Çıktı"}
+
+
+def kredi(u):
+    """Bir LLM çağrısının maliyeti (copilotUsage): token türü başına adet, birim fiyat, tutar.
+    Birimler logdaki gibidir: nanoAIU; 1 AIU = 10^9 nanoAIU."""
+    cu = u.get("copilotUsage") or {}
+    if cu.get("totalNanoAiu") is None:
+        return None
+    satir = []
+    for d in cu.get("tokenDetails") or []:
+        birim = d.get("costPerBatch", 0) / max(d.get("batchSize", 1), 1)  # nanoAIU / token
+        satir.append({"tur": KREDI_TUR.get(d.get("tokenType"), d.get("tokenType")), "token": d.get("tokenCount", 0),
+                      "birim": birim, "tutar": d.get("tokenCount", 0) * birim})
+    return {"toplam": cu["totalNanoAiu"], "satirlar": satir}
+
+
 def uret(events):
     prompts = promptlara_bol(events)
     idx = {id(e): i for i, e in enumerate(events)}
@@ -172,7 +190,8 @@ def uret(events):
                       "arac_sayisi": u.get("availableToolCount", 0), "sistem": sys_tok, "sistem_bolumleri": sys_sections,
                       "gecmis": hist_tok, "ogeler": items,
                       # Önbellek: eski loglarda cacheWriteTokens olmayabilir (None → gösterilmez)
-                      "yazilan": u.get("cacheWriteTokens"), "onbellek_ttl": u.get("cacheTtlSeconds")}
+                      "yazilan": u.get("cacheWriteTokens"), "onbellek_ttl": u.get("cacheTtlSeconds"),
+                      "kredi": kredi(u)}
             n_new = sum(1 for it in items if it["yeni"])
             add("cli", "llm", 1, f"LLM çağrısı {ci + 1}", f"LLM çağrısı {ci + 1}: CLI bağlamı LLM'e gönderir",
                 ("LLM'in hafızası yoktur: her çağrıda konuşmanın tamamı yeniden gönderilir. " if ci or pn > 1 else "")
@@ -242,9 +261,28 @@ def uret(events):
             if e["type"] == "hook.start" and e["data"]["hookType"] == "agentStop":
                 hook_step(e)
         n_tools = len(comps)
+        son_det = [{"etiket": "Ekranda görünen yanıt", "metin": kes(amsgs[-1]["data"].get("content", "") if amsgs else "")}]
+        # Prompt'un toplam maliyeti: çağrıların nanoAIU toplamı + premium istek farkı (checkpoint'lerden)
+        nano = [((x["data"]["usage"].get("copilotUsage") or {}).get("totalNanoAiu")) for x in usage]
+        if any(n is not None for n in nano):
+            # Checkpoint, prompt'un kapanış hook'undan SONRA yazılır: prompt'un son olayından sonraki
+            # ilk checkpoint bu prompt'a, kullanıcı mesajından önceki son checkpoint bir öncekine aittir.
+            cps = [e for e in events if e["type"] == "session.usage_checkpoint"]
+            son_i, user_i = idx[id(p["events"][-1])], idx[id(p["user"])]
+            sonra = [c for c in cps if idx[id(c)] > son_i]
+            once = [c for c in cps if idx[id(c)] < user_i]
+            prem = None
+            if sonra:
+                prem = (sonra[0]["data"].get("totalPremiumRequests") or 0) - ((once[-1]["data"].get("totalPremiumRequests") or 0) if once else 0)
+            satirlar = [["LLM çağrısı", str(len(turn_starts))],
+                        ["Toplam maliyet", f"{sum(n or 0 for n in nano) / 1e9:.3f} AIU".replace(".", ",")],
+                        ["Çağrı başına", " · ".join(f"{(n or 0) / 1e9:.3f}".replace(".", ",") for n in nano) + " AIU"]]
+            if prem is not None:
+                satirlar.append(["Premium istek", f"{prem} (LLM çağrısı başına değil, prompt başına sayılır)"])
+            son_det.append({"tur": "ozet", "etiket": "Bu prompt'un maliyeti", "satirlar": satirlar, "seviye": 3})
         add("cli", "user", 1, "yanıt", "Yanıt geliştiriciye gösterilir",
             f"Bu istek için {len(turn_starts)} LLM çağrısı" + (f" ve {n_tools} araç çağrısı" if n_tools else "") + " yapıldı.",
-            [{"etiket": "Ekranda görünen yanıt", "metin": kes(amsgs[-1]["data"].get("content", "") if amsgs else "")}], "ana")
+            son_det, "ana")
         out.append({"no": pn, "metin": kisalt(user.get("content", ""), 60), "adimlar": steps,
                     "ozet": {"llm": len(turn_starts), "arac": n_tools}})
     return {"model": model, "oran": round(ratio, 2), "promptlar": out}
