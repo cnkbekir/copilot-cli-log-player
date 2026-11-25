@@ -54,7 +54,9 @@ Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_st
 | Sistem prompt'u | İlk çağrıdaki `inputTokens − toolTokenCount` (o anda geçmiş yok) |
 | Karakter/token oranı | `(len(system) + len(ilk transformedContent)) / sistem_token` |
 | Bölüm ve mesaj token'ları | Karakter ÷ oran (**tahmin**; arayüzde `≈` ile gösterilir) |
-| Maliyet | `copilotUsage.tokenDetails`: `tokenCount × costPerBatch / batchSize` = nanoAIU (1 AIU = 10⁹). `totalNanoAiu` ile tutarlı olduğu doğrulandı. |
+| Konuşmanın görünmeyen kısmı | Ölçülen konuşma (`girdi − araç tanımları − sistem`) − görünen mesajların tahmini. `olcekle()` bunu ayrı bir `rol:"gizli"` satırı yapar; tahmin ölçülenden büyükse tahminleri orantılı küçültür. Böylece mesajların toplamı her çağrıda ölçülen değere eşittir. |
+| Maliyet | `copilotUsage.tokenDetails`: `tokenCount × costPerBatch / batchSize` = nanoAIU. `totalNanoAiu` ile tutarlı olduğu doğrulandı. |
+| AI kredisi / dolar | nanoAIU ÷ 10⁹ = AI kredisi (GitHub Copilot SDK belgesindeki örnek; belge "faturayla doğrulayın" der), 1 kredi = 0,01 $ (fatura belgesi). `--aylik-kredi` verilirse aylık hakka oran. Bu dönüşümleri değiştirirseniz kaynağı arayüzdeki nota da yazın. |
 
 ## Logdaki tuzaklar (bunlar daha önce hata çıkardı)
 
@@ -65,7 +67,10 @@ Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_st
 5. **MCP araçları** `tool.execution_start` içinde `mcpServerName`, `mcpToolName`, `mcpTransport` ile tanınır. VS Code tarafı araçları ise aynı `toolCallId` ile bir `external_tool.requested` olayı olmasından tanınır.
 6. **Büyük araç sonuçları** logda yalnızca "Output too large… Saved to: /var/folders/…" olarak durur. `temizle()` bu yolu `<geçici dosya>` yapar.
 7. **Eski CLI sürümlerinde** (2026 baharı öncesi) hook, skill, MCP ve `cacheWriteTokens`/`copilotUsage` alanları yoktur. Kod bu alanlar yoksa ilgili bölümleri göstermez; **çökmemelidir**.
-8. `events.jsonl` biçimi GitHub tarafından belgelenmemiştir. Copilot CLI `1.0.114` ile test edildi.
+8. **Şifreli düşünce blokları:** `assistant.message.encryptedContent` (yanıt başına 6–10 bin karakter) sonraki çağrılara geri gönderilir ama okunamaz. Ölçülen konuşma token'ı ile görünen mesajlar arasındaki büyük farkın (gerçek logda ~%60) ana kaynağı budur.
+9. **`ask_user` aracı:** LLM kullanıcıya soru sorar; cevap `human_response.recorded` olayı olarak gelir (aynı `toolCallId`). Oynatıcı bunu Geliştirici sütununa giden "soru" ve geri dönen "cevap" okları olarak gösterir.
+10. **Başlamayan / bitmeyen araçlar:** `toolRequests`'te olup `tool.execution_start` olmayan çağrılar "(çalışmadı)" (reddedilmiş, hook engellemiş ya da iptal), başlayıp `tool.execution_complete` olmayanlar "sonuç yok", `success: false` olanlar "hata" olarak gösterilir.
+11. `events.jsonl` biçimi GitHub tarafından belgelenmemiştir. Copilot CLI `1.0.114` ile test edildi.
 
 ## Şablon (HTML/JS) kuralları
 
@@ -105,7 +110,9 @@ Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_st
 
 ## Yeni bir olay türü eklemek
 
-1. Gerçek bir logda olayın yapısına bakın; içeriği değil, anahtarları ve türleri yazdırın.
+`copilot_log_player.py`'deki `BILINEN_OLAYLAR` (ve `BILINEN_ONEKLER`) dışında kalan her olay türü, üretim sırasında terminale **uyarı** olarak basılır ve prompt'un son adımında (Seviye 5) "Oynatıcının göstermediği olaylar" tablosunda listelenir. Yeni bir türle karşılaşınca:
+
+1. Gerçek bir logda olayın yapısına bakın; içeriği değil, anahtarları ve türleri yazdırın. Gösterilmeye değmeyen bir olaysa (oturum yönetimi, telemetri) yalnızca `BILINEN_OLAYLAR`'a ekleyin.
 2. `uret()` içinde uygun yerde `add(from, to, seviye, etiket, baslik, aciklama, detay, tur)` çağırın. Seviyesini öğretim sırasına göre seçin (hook ve yan model 5, skill ve MCP 4, bağlam ayrıntısı 3).
 3. Yeni bir sütun gerekiyorsa şablondaki `LANES` ve `ORDER`'a ekleyin; düşük seviyelerde nereye katlanacağını `lane()` içinde belirleyin.
 4. `examples/make_demo_log.py`'ye aynı olayı ekleyip demo üzerinde test edin.
