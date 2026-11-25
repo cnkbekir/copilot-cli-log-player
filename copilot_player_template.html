@@ -129,6 +129,7 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--soft);b
 .ozetsatir .alt{color:var(--muted);font-size:12.5px}
 .block.cache,.msgs+.block{margin-top:18px}
 .note{margin:6px 0 0;font-size:13.5px;color:var(--muted);max-width:980px}
+html.aciklama-gizli .note{display:none}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .msgs{display:grid;gap:6px;margin-top:8px}
 .msg{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--panel)}
@@ -165,10 +166,11 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;paddi
     <button id="prev" title="Önceki (←)">←</button>
     <div class="counter" id="counter"></div>
     <button id="next" title="Sonraki (→)">→</button>
-    <span class="hint"><kbd>←</kbd><kbd>→</kbd> adım · <kbd>1</kbd>–<kbd>5</kbd> seviye · <kbd>P</kbd> örnek · <kbd>F</kbd> sunum · <kbd>H</kbd> panel · <kbd>A</kbd> tümünü aç · <kbd>T</kbd> tema · <kbd>+</kbd><kbd>−</kbd> yazı</span>
+    <span class="hint"><kbd>←</kbd><kbd>→</kbd> adım · <kbd>1</kbd>–<kbd>5</kbd> seviye · <kbd>P</kbd> örnek · <kbd>F</kbd> sunum · <kbd>H</kbd> panel · <kbd>N</kbd> açıklamalar · <kbd>A</kbd> tümünü aç · <kbd>T</kbd> tema · <kbd>+</kbd><kbd>−</kbd> yazı</span>
   </div>
   <div class="icons">
     <button class="ibtn" id="btn-panel"></button>
+    <button class="ibtn" id="btn-not"></button>
     <button class="ibtn" id="btn-theme"></button>
     <button class="ibtn" id="btn-sunum"></button>
   </div>
@@ -440,6 +442,8 @@ const ICON={
   sunumAc:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3.5h5.5V9M9 20.5H3.5V15M20.5 3.5 14 10M3.5 20.5 10 14"/></svg>',
   sunumKapa:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4.5V10h5.5M10 19.5V14H4.5M14 10l6.5-6.5M10 14l-6.5 6.5"/></svg>',
   panelAcik:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 14h17"/><path d="M3.5 14h17v3.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="currentColor" stroke="none" opacity=".35"/></svg>',
+  notAcik:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg>',
+  notKapali:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke-dasharray="2 2.2"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/><path d="M5 19 19 5"/></svg>',
   panelKapali:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 14h17" stroke-dasharray="2 2.2"/></svg>',
 };
 function setBtn(id, svg, label, pressed){
@@ -474,7 +478,17 @@ function applyPanel(){
 }
 function togglePanel(){ ui.panelGizli=!ui.panelGizli; saveUi(); applyPanel(); render(); }
 document.getElementById("btn-panel").onclick=togglePanel;
-// URL ile açılış: #ornek=3&seviye=4&adim=12&panel=0&tema=light&sunum=1 (hepsi isteğe bağlı)
+// Açıklamalar: tablo ve çubukların altındaki gri notlar (.note). Veri her zaman görünür kalır.
+function applyNot(){
+  document.documentElement.classList.toggle("aciklama-gizli", !!ui.notGizli);
+  setBtn("btn-not", ui.notGizli?ICON.notKapali:ICON.notAcik, ui.notGizli?"Açıklamaları göster (N)":"Açıklamaları gizle (N)", !ui.notGizli);
+}
+function toggleNot(){
+  ui.notGizli=!ui.notGizli; saveUi(); applyNot();
+  document.getElementById("live").textContent = ui.notGizli ? "Açıklamalar gizlendi" : "Açıklamalar gösteriliyor";
+}
+document.getElementById("btn-not").onclick=toggleNot;
+// URL ile açılış: #ornek=3&seviye=4&adim=12&panel=0&aciklama=0&tema=light&sunum=1 (hepsi isteğe bağlı)
 (function(){
   const h=new URLSearchParams(location.hash.slice(1));
   const n=(k)=>h.has(k)?parseInt(h.get(k),10):null;
@@ -482,10 +496,11 @@ document.getElementById("btn-panel").onclick=togglePanel;
   if(n("seviye")) st.lvl=Math.min(Math.max(n("seviye"),1),5);
   if(n("adim")) st.i=n("adim")-1;
   if(h.has("panel")) ui.panelGizli=h.get("panel")==="0";
+  if(h.has("aciklama")) ui.notGizli=h.get("aciklama")==="0";
   if(THEMES.includes(h.get("tema"))) ui.theme=h.get("tema");
   if(h.get("sunum")==="1") document.documentElement.classList.add("sunum");
 })();
-applyTheme(); applyZoom(); applyPanel();
+applyTheme(); applyZoom(); applyPanel(); applyNot();
 setBtn("btn-sunum", ICON.sunumAc, "Sunum modu: tam ekran + büyük yazı (F)", false);
 
 // ── Alt panel boyutlandırma: üst kenardaki tutamaç (fare/dokunma ve ↑ ↓ tuşları) ──
@@ -525,6 +540,7 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="f"||e.key==="F"){e.preventDefault();setSunum(!document.documentElement.classList.contains("sunum"));}
   else if(e.key==="t"||e.key==="T"){cycleTheme();}
   else if(e.key==="h"||e.key==="H"){togglePanel();}
+  else if(e.key==="n"||e.key==="N"){toggleNot();}
   else if(e.key==="a"||e.key==="A"){toggleTumu();}
   else if(e.key==="+"||e.key==="="){ui.zoom=Math.min(2,+(ui.zoom+0.1).toFixed(2));saveUi();applyZoom();render();}
   else if(e.key==="-"||e.key==="_"){ui.zoom=Math.max(1,+(ui.zoom-0.1).toFixed(2));saveUi();applyZoom();render();}

@@ -75,7 +75,7 @@ Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_st
 ## Şablon (HTML/JS) kuralları
 
 - **Durum:** `st = {p, lvl, i}` (örnek, seviye, adım), `ui = {theme, zoom, panelGizli, panelH, tumuAcik}`. localStorage anahtarları `copilot-player`, `copilot-player-ui`; her erişim `try/catch` içinde.
-- **URL ile açılış** (`#ornek=&seviye=&adim=&panel=&tema=&sunum=`) localStorage'dan sonra uygulanır ve onu ezer. README görselleri bununla alınır.
+- **URL ile açılış** (`#ornek=&seviye=&adim=&panel=&aciklama=&tema=&sunum=`) localStorage'dan sonra uygulanır ve onu ezer. README görselleri bununla alınır.
 - `render()` her adımda satırları **yeniden oluşturur**. Odak bilgisi satırlar silinmeden **önce** okunmalı (`hadRowFocus`), yoksa klavye odağı kaybolur.
 - **Erişilebilirlik (ui-ux-pro-max incelemesiyle oturtuldu, bozmayın):**
   - Renk token'ları (`--c-*`) metin olarak da kullanılır; her iki temada zemine karşı en az 5:1. Yeni renk eklerken kontrastı hesaplayın.
