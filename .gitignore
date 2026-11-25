@@ -1,0 +1,14 @@
+# Copilot CLI logları ve üretilen çıktılar gerçek oturum içeriği taşır
+*.jsonl
+!examples/demo-events.jsonl
+*.html
+!copilot_player_template.html
+.archify/
+out/
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
