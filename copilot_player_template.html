@@ -123,6 +123,8 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--soft);b
 .ktable tbody th{color:var(--muted)}
 .ktable td:nth-child(2),.ktable td:nth-child(3),.ktable td:nth-child(4){text-align:right}
 .ktable td:last-child{width:160px}
+.ktable.ozet td{width:auto;text-align:left}
+.ktable.ozet th{white-space:nowrap;padding-right:24px}
 .kbar{display:block;height:8px;border-radius:4px;background:var(--c-cloud);min-width:2px}
 .ozetsatir{display:flex;flex-wrap:wrap;gap:4px 22px;margin-top:6px;font-size:13.5px}
 .ozetsatir b{font-weight:600}
@@ -347,7 +349,7 @@ function krediNot(k){
 }
 function ozetBlock(b){
   return el("div",{class:"block"},el("div",{class:"t"},b.etiket),
-    el("table",{class:"ktable"},el("tbody",{},...b.satirlar.map(([k,v])=>el("tr",{},el("th",{scope:"row"},k),el("td",{},v))))));
+    el("table",{class:"ktable ozet"},el("tbody",{},...b.satirlar.map(([k,v])=>el("tr",{},el("th",{scope:"row"},k),el("td",{},v))))));
 }
 function contextBlock(b){
   const wrap=el("div",{class:"block"});
