@@ -46,6 +46,38 @@ def kredi(u):
     return {"toplam": cu["totalNanoAiu"], "satirlar": satir}
 
 
+def olcekle(items, hedef, sifreli=0):
+    """Mesajların karakterden tahmin edilen token toplamını, ölçülen konuşma toplamıyla (hedef) eşitler.
+
+    - Tahmin < ölçülen (gerçek loglarda olağan): tahminlere dokunulmaz; aradaki fark ayrı bir
+      "görünmeyen kısım" satırı olur. Fark çoğunlukla modele geri gönderilen şifreli düşünce
+      bloklarından (assistant.message.encryptedContent) ve mesaj çerçevelerinden gelir.
+    - Tahmin > ölçülen: tahminler orantılı küçültülür (en büyük kalan yöntemiyle yuvarlanır).
+    Dönüş: "fark", "olcek" ya da None (eşitlenemedi)."""
+    toplam = sum(it["token"] for it in items)
+    if hedef <= 0 or toplam <= 0:
+        return None
+    if toplam <= hedef:
+        if hedef > toplam:
+            aciklama = ("Ölçülen konuşma toplamı ile görünen mesajların tahmini arasındaki fark. "
+                        "Bu kısım logda okunamaz: modelin önceki yanıtlarıyla birlikte geri gönderilen şifreli "
+                        "düşünce blokları, mesaj/araç çağrısı çerçeveleri ve CLI'ın eklediği sistem hatırlatmaları.")
+            if sifreli:
+                aciklama += f" Bu çağrıya kadar {sifreli} yanıtta şifreli düşünce bloğu var."
+            items.append({"rol": "gizli", "baslik": "Logda içeriği görünmeyen kısım", "metin": aciklama,
+                          "token": hedef - toplam, "yeni": False})
+        return "fark"
+    ham = [it["token"] * hedef / toplam for it in items]
+    taban = [int(x) for x in ham]
+    kalan = hedef - sum(taban)
+    for j in sorted(range(len(items)), key=lambda j: ham[j] - taban[j], reverse=True)[:kalan]:
+        taban[j] += 1
+    for it, t in zip(items, taban):
+        it["tahmin"] = it["token"]
+        it["token"] = t
+    return "olcek"
+
+
 def uret(events):
     prompts = promptlara_bol(events)
     idx = {id(e): i for i, e in enumerate(events)}
@@ -67,6 +99,8 @@ def uret(events):
             cwd = (e["data"].get("context") or {}).get("cwd", cwd)
 
     # Konuşma geçmişi öğeleri (olay sırasına göre), her çağrının girdisini kurmak için
+    # Şifreli düşünce bloğu taşıyan LLM yanıtları (içerik okunamaz ama sonraki çağrılara geri gönderilir)
+    sifreli_idx = [idx[id(e)] for e in events if e["type"] == "assistant.message" and e["data"].get("encryptedContent")]
     conv = []  # (olay_index, öğe)
     exec_name = {e["data"]["toolCallId"]: e["data"].get("toolName") for e in events if e["type"] == "tool.execution_start"}
     for e in events:
@@ -185,10 +219,11 @@ def uret(events):
             tools_tok = u.get("toolTokenCount", 0)
             sys_tok = sum(s["token"] for s in sys_sections)
             hist_tok = max(tin - tools_tok - sys_tok, 0)
-            yeni_tok = sum(it["token"] for it in items if it["yeni"])
+            sifreli = sum(1 for i in sifreli_idx if i < cut)
+            olcekli = olcekle(items, hist_tok, sifreli)
             baglam = {"tur": "baglam", "toplam": tin, "onbellek": u.get("cacheReadTokens", 0), "araclar": tools_tok,
                       "arac_sayisi": u.get("availableToolCount", 0), "sistem": sys_tok, "sistem_bolumleri": sys_sections,
-                      "gecmis": hist_tok, "ogeler": items,
+                      "gecmis": hist_tok, "ogeler": items, "olcekli": olcekli,
                       # Önbellek: eski loglarda cacheWriteTokens olmayabilir (None → gösterilmez)
                       "yazilan": u.get("cacheWriteTokens"), "onbellek_ttl": u.get("cacheTtlSeconds"),
                       "kredi": kredi(u)}

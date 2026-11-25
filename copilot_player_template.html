@@ -133,6 +133,9 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--soft);b
 .msgs{display:grid;gap:6px;margin-top:8px}
 .msg{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--panel)}
 .msg.yeni{background:var(--new);border-color:var(--newline)}
+.msg.gorunmez{border-style:dashed;background:var(--soft)}
+.msg.gorunmez pre{font-family:inherit;font-size:13.5px;background:transparent;border:0;padding:4px 0 0;max-height:none}
+.msg.gorunmez pre::after{display:none}
 .msg.gizli{color:var(--muted);font-style:italic;background:var(--soft)}
 .msg .h{display:flex;gap:8px;align-items:baseline;font-size:13px}
 .msg .h b{font-weight:600}
@@ -198,7 +201,7 @@ const LANES = {
 };
 const ORDER = ["user","cli","hooks","llm","side","tools","skill","host","mcp"];
 const LEVELS = ["LLM ile konuşma","Araç döngüsü","Bağlam","Skill & MCP","Hooks & dahası"];
-const ROLE = {user:["kullanıcı","frontend"], assistant:["LLM","cloud"], tool:["araç sonucu","messagebus"], skill:["skill","database"]};
+const ROLE = {user:["kullanıcı","frontend"], assistant:["LLM","cloud"], tool:["araç sonucu","messagebus"], skill:["skill","database"], gizli:["görünmeyen","external"]};
 const fmt = n => (n||0).toLocaleString("tr-TR");
 const col = c => `var(--c-${c})`;
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
@@ -343,9 +346,14 @@ function contextBlock(b){
   }
   const msgs=el("div",{class:"msgs"});
   msgs.append(el("div",{class:"t",style:"font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em"},"LLM'e giden mesajlar (sırasıyla)"));
+  if(st.lvl>=3 && b.olcekli) msgs.append(el("p",{class:"note",style:"margin:0 0 4px"},
+    b.olcekli==="fark"
+      ? `Mesaj token'ları karakter sayısından tahmin. Ölçülen konuşma toplamına (${fmt(b.gecmis)} token) kalan fark, en alttaki "görünmeyen kısım" satırında.`
+      : `Mesaj token'ları karakter sayısından tahmin edilip ölçülen konuşma toplamına (${fmt(b.gecmis)} token) göre küçültüldü.`));
   if(st.lvl<3) msgs.append(el("div",{class:"msg gizli"},"+ gizli sistem talimatları ve kullanılabilir araç listesi (Seviye 3'te açılır)"));
   else msgs.append(el("div",{class:"msg"},el("div",{class:"h"},el("span",{class:"role",style:"--c:var(--c-backend)"},"system"),el("b",{},"Sistem prompt'u + araç tanımları"),el("span",{class:"tk"},`≈${fmt(b.sistem+b.araclar)} token`))));
   for(const it of b.ogeler){
+    if(it.rol==="gizli" && st.lvl<3) continue; // token hesabı ayrıntısı: yalnızca Seviye 3+
     const [rn,rc]=ROLE[it.rol]||[it.rol,"external"];
     // Mesaj kutusu: tıklama ya da Enter/Space ile açılır/kapanır
     const toggle = p => { const o=p.classList.toggle("open"); p.setAttribute("aria-expanded",String(o)); };
@@ -353,8 +361,8 @@ function contextBlock(b){
         onclick:e=>toggle(e.currentTarget),
         onkeydown:e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); e.stopPropagation(); toggle(e.currentTarget); } }},
       st.lvl>=3 && it.tam ? it.tam : it.metin);
-    msgs.append(el("div",{class:"msg"+(it.yeni?" yeni":"")},
-      el("div",{class:"h"},el("span",{class:"role",style:`--c:var(--c-${rc})`},rn),el("b",{},it.baslik+(it.yeni?"  · yeni":"")),st.lvl>=3?el("span",{class:"tk"},`≈${fmt(it.token)} token`):null),pre));
+    msgs.append(el("div",{class:"msg"+(it.yeni?" yeni":"")+(it.rol==="gizli"?" gorunmez":"")},
+      el("div",{class:"h"},el("span",{class:"role",style:`--c:var(--c-${rc})`},rn),el("b",{},it.baslik+(it.yeni?"  · yeni":"")),st.lvl>=3?el("span",{class:"tk",title:it.tahmin!=null?`Karakterden tahmin: ≈${fmt(it.tahmin)} · ölçülen konuşma toplamına göre ölçeklendi`:"Karakter sayısından tahmin"},`≈${fmt(it.token)} token`):null),pre));
   }
   wrap.append(msgs);
   // Ayrıntılı önbellek ve maliyet tabloları mesajların altında (özetleri yapışık başlıkta)
