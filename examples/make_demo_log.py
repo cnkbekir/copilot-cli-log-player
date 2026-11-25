@@ -20,6 +20,11 @@ TOOL_TOKENS, TOOL_COUNT = 9120, 104
 t = datetime(2026, 1, 15, 9, 30, 0, tzinfo=timezone.utc)
 events = []
 conv_chars = 0
+prev_tin = 0          # önbellekte duran önceki girdi (prompt cache)
+total_nano = 0        # oturum boyunca harcanan nanoAIU
+premium = 0           # prompt başına sayılan premium istek
+# Demo birim fiyatları (nanoAIU / token); oranlar gerçek loglardaki yapıyı taklit eder
+PRICE = {"input": 10_000, "cache_read": 1_000, "cache_write": 12_500, "output": 50_000}
 
 
 def emit(typ, data, dt_ms=5):
@@ -97,13 +102,22 @@ def hook(htype, inp, output=None, dur=3):
 
 
 def llm_call(turn, content="", tool_requests=(), reasoning="", out_tokens=60, think_ms=2800, cache=True):
-    global conv_chars
+    global conv_chars, prev_tin, total_nano
     emit("assistant.turn_start", {"turnId": str(turn)}, 3)
     tin = SYS_TOKENS + TOOL_TOKENS + round(conv_chars / CHARS_PER_TOKEN)
+    read = min(prev_tin, tin - 3) if cache else 0   # önceki çağrının girdisi önbellekte
+    write = tin - read - 3                          # yeni eklenen kısım önbelleğe yazılır
+    prev_tin = tin
+    counts = {"input": 3, "cache_read": read, "cache_write": write, "output": out_tokens}
+    nano = sum(counts[k] * PRICE[k] for k in counts)
+    total_nano += nano
     emit("session.usage_record", {"usage": {
         "model": MODEL, "inputTokens": tin, "outputTokens": out_tokens,
-        "cacheReadTokens": (tin - 180) if cache else 0, "reasoningTokens": 40,
+        "cacheReadTokens": read, "cacheWriteTokens": write, "cacheTtlSeconds": 1800, "reasoningTokens": 40,
         "toolTokenCount": TOOL_TOKENS, "availableToolCount": TOOL_COUNT,
+        "copilotUsage": {"totalNanoAiu": nano, "tokenDetails": [
+            {"tokenType": k, "tokenCount": v, "batchSize": 1_000_000, "costPerBatch": PRICE[k] * 1_000_000, "model": MODEL}
+            for k, v in counts.items()]},
         "finishReason": "tool_calls" if tool_requests else "stop"}}, think_ms)
     reqs = []
     for name, args in tool_requests:
@@ -150,7 +164,11 @@ def user(text, extra=""):
 
 
 def stop():
+    global premium
     hook("agentStop", {"stopReason": "end_turn"})
+    premium += 1  # premium istek prompt başına sayılır, LLM çağrısı başına değil
+    emit("session.usage_checkpoint", {"totalNanoAiu": total_nano, "totalPremiumRequests": premium,
+                                      "modelCacheState": [{"modelId": MODEL, "cacheTtlSeconds": 1800}]})
 
 
 # ── Oturum ────────────────────────────────────────────────────────────────
