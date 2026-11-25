@@ -86,9 +86,9 @@ egitim.html#ornek=3&seviye=4&adim=8&panel=0&aciklama=0&tema=light&sunum=1
 | Seviye | Görünen sütunlar | Ne eklenir |
 |---|---|---|
 | 1 · LLM ile konuşma | Geliştirici, Copilot CLI, LLM | İstek → LLM → yanıt. Sistem prompt'u tek satır "gizli talimatlar" olarak görünür. |
-| 2 · Araç döngüsü | + Araçlar | tool_call → araç → sonuç → tekrar LLM. Skill / VS Code / MCP araçları da "Araçlar" sütununda. |
+| 2 · Araç döngüsü | + Araçlar | tool_call → araç → sonuç → tekrar LLM. Skill / VS Code / MCP araçları ve alt agent'lar da "Araçlar" sütununda. |
 | 3 · Bağlam | (aynı) | Token çubuğu, önbellek (cache) kullanımı, AI kredisi maliyeti, sistem prompt'unun bölümleri, CLI'ın prompt'a eklediği metinler, modelin düşünce özeti |
-| 4 · Skill & MCP | + Skill, VS Code, MCP | SKILL.md'nin yüklenmesi, `tool_search_tool`, MCP sunucusu |
+| 4 · Skill & MCP | + Skill, VS Code, MCP, Alt agent | SKILL.md'nin yüklenmesi, `tool_search_tool`, MCP sunucusu, alt agent'ın kendi görevi ve LLM çağrıları |
 | 5 · Hooks & dahası | + Hooks, Yan LLM | Tüm hook'lar (girdi/çıktı), ana modelden ayrı çalışan küçük modeller |
 
 İpucu: Seviye 1'i araç kullanmayan bir örnekle (ör. "merhaba") anlatın; araçlı örnekler Seviye 2'den itibaren anlamlıdır.
@@ -149,7 +149,7 @@ node <archify>/bin/archify.mjs finalize sequence <klasör>/candidate.json <klas�
 ## Sınırlar
 
 - `events.jsonl` biçimi GitHub tarafından belgelenmemiştir ve sürümle değişebilir. Copilot CLI `1.0.114` ile test edildi; daha eski sürümlerde hook, skill ve MCP olayları bulunmayabilir.
-- Paralel araç çağrıları, alt agent'lar (`subagent.*`) ve reddedilen araç çağrıları henüz örnek logla test edilmedi.
+- Alt agent'lar (arka planda çalışma, hata, bildirim ve `read_agent` dahil) gerçek bir logla test edildi. Paralel araç çağrıları ve reddedilen araç çağrıları henüz yalnızca uydurma bir logla denendi.
 - Arayüz Türkçedir.
 
 ## Dosyalar

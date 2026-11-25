@@ -45,17 +45,40 @@ def oku(path):
 
 
 def promptlara_bol(events):
-    """Her user.message bir prompt başlatır. Prompt'u tetikleyen hook'lar
+    """Her kullanıcı user.message'ı bir prompt başlatır. Prompt'u tetikleyen hook'lar
     (userPromptSubmitted vb.) user.message'tan önce geldiği için, önceki
-    agentStop/sessionEnd sonrasındaki olaylar bir sonraki prompt'a aittir."""
+    agentStop/sessionEnd sonrasındaki olaylar bir sonraki prompt'a aittir.
+
+    Alt agent'lar: alt agent'a ait her olayın üst düzeyinde ``agentId`` vardır. Bu olaylar
+    (alt agent'ın kendi görevi olan user.message dahil) yeni prompt açmaz; alt agent'ı başlatan
+    prompt'a eklenir, ana agent'ın turu kapandıktan sonra gelseler bile. Arka planda çalışan bir
+    alt agent bitince CLI ana agent'a ``system.notification`` gönderir ve kullanıcı bir şey
+    yazmadan yeni bir tur açar; bu bildirim, alt agent'ı başlatan prompt'u yeniden açar."""
     prompts, current, pending = [], None, []
+    sahip = {}  # agentId → alt agent'ı başlatan prompt
     for e in events:
         t = e.get("type")
+        aid = e.get("agentId")
+        if aid:
+            if t == "subagent.started" and current is not None:
+                sahip[aid] = current
+            hedef = sahip.get(aid) or current or (prompts[-1] if prompts else None)
+            if hedef is None:
+                pending.append(e)
+            else:
+                hedef["events"].append(e)
+            continue
         if t == "user.message":
             current = {"user": e, "events": pending + [e]}
             prompts.append(current)
             pending = []
             continue
+        if t == "system.notification":
+            sid = ((e.get("data") or {}).get("kind") or {}).get("agentId")
+            if sid in sahip:
+                current = sahip[sid]
+                current["events"].extend(pending)
+                pending = []
         if current is None:
             pending.append(e)
             continue

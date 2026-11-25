@@ -37,13 +37,14 @@ tek dosya HTML (veri + CSS + vanilla JS)
  "tur": "llm|donus|arac|hook|ana|normal", "detay": [ blok, ... ]}
 ```
 
-- Sütunlar (katılımcılar): `user, cli, hooks, llm, side, tools, skill, host, mcp`. `host` = VS Code tarafındaki dış araçlar (`external_tool.*`), `side` = ana modelden ayrı küçük model (`model.*` olayları).
-- `seviye` (1–5), adımın en erken hangi seviyede görüneceğidir. Şablondaki `lane()`, seviye 4'ün altında `skill/host/mcp` sütunlarını `tools`'a katlar; akış hiçbir seviyede kopmaz.
+- Sütunlar (katılımcılar): `user, cli, hooks, llm, side, tools, skill, host, mcp, agent`. `host` = VS Code tarafındaki dış araçlar (`external_tool.*`), `side` = ana modelden ayrı küçük model (`model.*` olayları), `agent` = alt agent.
+- `seviye` (1–5), adımın en erken hangi seviyede görüneceğidir. Şablondaki `lane()`, seviye 4'ün altında `skill/host/mcp/agent` sütunlarını `tools`'a katlar; akış hiçbir seviyede kopmaz.
+- **Sıralama:** her adım üretilirken bir olay sırası anahtarı alır (`_k`) ve prompt'un adımları sonunda buna göre (kararlı) sıralanır. Bir LLM turunda üretilen adımlar o turun `assistant.turn_start` sırasını paylaşır (iç sıraları korunur); alt agent adımları, hata ve kalan hook'lar kendi olay sıralarında yer alır; son "yanıt" adımı her zaman sondadır.
 - `detay` blokları: düz metin `{etiket, metin, vurgu?, seviye?}`, LLM girdisi `{tur:"baglam", ...}`, özet tablo `{tur:"ozet", etiket, satirlar:[[k,v]], seviye}`.
 
 ### LLM'e giden mesaj listesi nasıl kuruluyor
 
-Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_start` için, ondan önceki tüm `user.message` (`transformedContent`), `assistant.message` (metin + `toolRequests`), `tool.execution_complete` ve `skill.invoked` olayları sırayla toplanır. Bir önceki çağrıdan sonra eklenenler `yeni: true` olur.
+Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_start` için, ondan önceki tüm `user.message` (`transformedContent`), `assistant.message` (metin + `toolRequests`), `tool.execution_complete`, `skill.invoked` ve `system.notification` olayları sırayla toplanır. Alt agent'a ait olaylar (`agentId` taşıyanlar) ana konuşmaya girmez; alt agent'ın çağrıları kendi olaylarından ayrıca kurulur. Bir önceki çağrıdan sonra eklenenler `yeni: true` olur.
 
 ### Token sayıları: ölçülen ve tahmin edilen
 
@@ -70,7 +71,12 @@ Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_st
 8. **Şifreli düşünce blokları:** `assistant.message.encryptedContent` (yanıt başına 6–10 bin karakter) sonraki çağrılara geri gönderilir ama okunamaz. Ölçülen konuşma token'ı ile görünen mesajlar arasındaki büyük farkın (gerçek logda ~%60) ana kaynağı budur.
 9. **`ask_user` aracı:** LLM kullanıcıya soru sorar; cevap `human_response.recorded` olayı olarak gelir (aynı `toolCallId`). Oynatıcı bunu Geliştirici sütununa giden "soru" ve geri dönen "cevap" okları olarak gösterir.
 10. **Başlamayan / bitmeyen araçlar:** `toolRequests`'te olup `tool.execution_start` olmayan çağrılar "(çalışmadı)" (reddedilmiş, hook engellemiş ya da iptal), başlayıp `tool.execution_complete` olmayanlar "sonuç yok", `success: false` olanlar "hata" olarak gösterilir.
-11. `events.jsonl` biçimi GitHub tarafından belgelenmemiştir. Copilot CLI `1.0.114` ile test edildi.
+11. **Bir LLM turu birden fazla `assistant.message` içerebilir** (ör. önce boş içerikli düşünce parçaları, sonra metin). Turlar `assistant.turn_start`/`turn_end` arasındaki mesajlar toplanarak kurulur (`turlar()`, `birlesik()`); mesajları turlarla sırayla eşlemek yanlış sonuç verir.
+12. **Alt agent olayları üst düzeyde `agentId` taşır.** Alt agent'ın görevi de bir `user.message`'tır (`source: "agent-…"`); yeni prompt açmamalıdır. `promptlara_bol` bu olayları, `subagent.started` olayının geldiği prompt'a ekler (ana agent'ın turu kapandıktan sonra gelseler bile).
+13. **Alt agent arka planda çalışabilir.** `task` aracı hemen "Agent started in background" sonucuyla döner; ana agent turunu bitirir (`agentStop`). Alt agent bitince CLI `system.notification` (`kind.agentId`) gönderir, sonra **LLM çağrısı olmadan** kendisi bir `read_agent` çağrısı ekler (turn dışında yazılan `assistant.message`, `toolCallId` UUID biçiminde) ve ana agent için yeni bir tur açar. Bildirim, alt agent'ı başlatan prompt'u yeniden açar.
+14. **Alt agent başka bir modelde çalışabilir** (`session.usage_record.usage.model`, otomatik modda ayarlardaki modelden farklı olabilir). Karakter/token oranı bu yüzden alt agent'ın kendi ilk çağrısından ayrıca hesaplanır.
+15. **Hatalar:** `session.error` (ör. `400 model_not_supported`) ve `subagent.failed`. Başarısız alt agent'ın turu için `session.usage_record` yoktur.
+16. `events.jsonl` biçimi GitHub tarafından belgelenmemiştir. Copilot CLI `1.0.114` ile test edildi.
 
 ## Şablon (HTML/JS) kuralları
 
