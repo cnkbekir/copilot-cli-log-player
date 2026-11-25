@@ -93,7 +93,23 @@ def olcekle(items, hedef, sifreli=0):
     return "olcek"
 
 
-def uret(events):
+KREDI_USD = 0.01  # 1 AI kredisi = 0,01 $ (GitHub Copilot fatura belgesi)
+
+
+def tr_sayi(x, basamak=3):
+    return f"{x:,.{basamak}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def dolar(kredi_):
+    """Küçük tutarlar için 2 anlamlı basamak: 0,315 kredi → 0,0032 $."""
+    usd = kredi_ * KREDI_USD
+    if usd == 0:
+        return "0 $"
+    basamak = max(2, -int(f"{usd:e}".split("e")[1]) + 1)
+    return tr_sayi(usd, basamak) + " $"
+
+
+def uret(events, aylik_kredi=None):
     prompts = promptlara_bol(events)
     idx = {id(e): i for i, e in enumerate(events)}
     usage_all = [e for e in events if e["type"] == "session.usage_record"]
@@ -367,9 +383,13 @@ def uret(events):
             prem = None
             if sonra:
                 prem = (sonra[0]["data"].get("totalPremiumRequests") or 0) - ((once[-1]["data"].get("totalPremiumRequests") or 0) if once else 0)
+            # nanoAIU ÷ 10⁹ = AI kredisi (GitHub Copilot SDK belgesindeki dönüşüm)
+            toplam_kredi = sum(n or 0 for n in nano) / 1e9
             satirlar = [["LLM çağrısı", str(len(turn_starts))],
-                        ["Toplam maliyet", f"{sum(n or 0 for n in nano) / 1e9:.3f} AIU".replace(".", ",")],
-                        ["Çağrı başına", " · ".join(f"{(n or 0) / 1e9:.3f}".replace(".", ",") for n in nano) + " AIU"]]
+                        ["Toplam maliyet", f"{tr_sayi(toplam_kredi)} AI kredisi (≈ {dolar(toplam_kredi)})"],
+                        ["Çağrı başına", " · ".join(tr_sayi((n or 0) / 1e9) for n in nano) + " AI kredisi"]]
+            if aylik_kredi:
+                satirlar.append(["Aylık haktan", f"%{tr_sayi(100 * toplam_kredi / aylik_kredi, 3)} kadarı ({tr_sayi(aylik_kredi, 0)} kredilik aylık hak)"])
             if prem is not None:
                 satirlar.append(["Premium istek", f"{prem} (LLM çağrısı başına değil, prompt başına sayılır)"])
             son_det.append({"tur": "ozet", "etiket": "Bu prompt'un maliyeti", "satirlar": satirlar, "seviye": 3})
@@ -378,7 +398,8 @@ def uret(events):
             son_det, "ana")
         out.append({"no": pn, "metin": kisalt(user.get("content", ""), 60), "adimlar": steps,
                     "ozet": {"llm": len(turn_starts), "arac": n_tools}})
-    return {"model": model, "oran": round(ratio, 2), "promptlar": out, "uyarilar": uyarilar}
+    return {"model": model, "oran": round(ratio, 2), "promptlar": out, "uyarilar": uyarilar,
+            "aylik_kredi": aylik_kredi, "kredi_usd": KREDI_USD}
 
 
 def main():
@@ -388,6 +409,7 @@ def main():
     ap.add_argument("--baslik", default="Copilot CLI içeriden: bir istek nasıl işlenir?")
     ap.add_argument("--promptlar", help="yalnızca bu prompt'ları al, ör. 2,5,7 veya 3-6 (numaralar --list çıktısındaki gibi)")
     ap.add_argument("--list", action="store_true", help="oturumdaki prompt'ları numaralarıyla listele ve çık")
+    ap.add_argument("--aylik-kredi", type=float, help="planınızın aylık AI kredisi hakkı (ör. Pro 1500, Pro+ 7000); verilirse maliyetin bu hakkın ne kadarı olduğu da gösterilir")
     a = ap.parse_args()
     events = oku(a.events)
     if a.list:
@@ -396,7 +418,7 @@ def main():
             n_tool = sum(1 for e in p["events"] if e["type"] == "tool.execution_start")
             print(f"{i:>3}. {kisalt(p['user']['data'].get('content', ''), 70)}  ·  {n_llm} LLM, {n_tool} araç")
         return
-    data = uret(events)
+    data = uret(events, a.aylik_kredi)
     for pn, t, n in data.pop("uyarilar", []):
         print(f"uyarı: prompt {pn}: oynatıcının tanımadığı olay '{t}' ({n} kez) gösterilmedi; Seviye 5'te son adımda listelenir.", file=sys.stderr)
     if a.promptlar:

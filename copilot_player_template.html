@@ -308,13 +308,16 @@ function cacheBlock(b){
     el("p",{class:"note"},yorum));
 }
 // Kredi: bu çağrının maliyeti token türüne göre (birimler logdaki gibi: 1 AIU = 10⁹ nanoAIU)
+// nanoAIU ÷ 10⁹ = AI kredisi (GitHub Copilot SDK belgesi); 1 kredi = 0,01 $ (fatura belgesi)
 const aiu = n => (n/1e9).toLocaleString("tr-TR",{minimumFractionDigits:3,maximumFractionDigits:3});
+const usd = n => { const v=n/1e9*(DATA.kredi_usd||0.01); return v===0?"0 $":v.toLocaleString("tr-TR",{maximumSignificantDigits:2})+" $"; };
+const aylikPay = n => DATA.aylik_kredi ? ` · aylık hakkın %${(100*n/1e9/DATA.aylik_kredi).toLocaleString("tr-TR",{maximumFractionDigits:3})} kadarı` : "";
 function krediBlock(k){
   const max=Math.max(...k.satirlar.map(s=>s.tutar),1);
   return el("div",{class:"block"},
-    el("div",{class:"t"},`Bu çağrının maliyeti: ${aiu(k.toplam)} AIU`),
+    el("div",{class:"t"},`Bu çağrının maliyeti: ${aiu(k.toplam)} AI kredisi (≈ ${usd(k.toplam)})${aylikPay(k.toplam)}`),
     el("table",{class:"ktable"},
-      el("thead",{},el("tr",{},el("th",{},"Token türü"),el("th",{},"Token"),el("th",{},"Birim fiyat"),el("th",{},"Tutar (AIU)"),el("th",{"aria-hidden":"true"},""))),
+      el("thead",{},el("tr",{},el("th",{},"Token türü"),el("th",{},"Token"),el("th",{},"Birim fiyat"),el("th",{},"Tutar (kredi)"),el("th",{"aria-hidden":"true"},""))),
       el("tbody",{},...k.satirlar.map(s=>el("tr",{},
         el("td",{},s.tur), el("td",{},fmt(s.token)), el("td",{},`${fmt(s.birim)} nanoAIU`), el("td",{},aiu(s.tutar)),
         el("td",{"aria-hidden":"true"},el("span",{class:"kbar",style:`width:${Math.round(100*s.tutar/max)}%`})))))),
@@ -323,9 +326,15 @@ function krediBlock(k){
 function krediNot(k){
   const b=t=>k.satirlar.find(s=>s.tur===t)?.birim;
   const girdi=b("Önbelleksiz girdi"), okuma=b("Önbellekten okuma");
-  if(!girdi||!okuma) return null;
-  const kat=(girdi/okuma).toLocaleString("tr-TR",{maximumFractionDigits:1});
-  return el("p",{class:"note"},`Önbellekten okumak, önbelleksiz girdiden ${kat} kat ucuz. Bu yüzden ilk çağrıdan sonra, bağlam büyüse de çağrılar çok daha ucuza gelir.`);
+  const notlar=[];
+  if(girdi&&okuma){
+    const kat=(girdi/okuma).toLocaleString("tr-TR",{maximumFractionDigits:1});
+    notlar.push(el("p",{class:"note"},`Önbellekten okumak, önbelleksiz girdiden ${kat} kat ucuz. Bu yüzden ilk çağrıdan sonra, bağlam büyüse de çağrılar çok daha ucuza gelir.`));
+  }
+  notlar.push(el("p",{class:"note"},"Dönüşüm: logdaki nanoAIU ÷ 10⁹ = AI kredisi (GitHub Copilot SDK belgesi), 1 AI kredisi = 0,01 $ (GitHub fatura belgesi). "
+    + (DATA.aylik_kredi ? `Aylık hak: ${fmt(DATA.aylik_kredi)} kredi. ` : "")
+    + "Kesin tutar için GitHub'daki kullanım sayfanızla karşılaştırın."));
+  return notlar;
 }
 function ozetBlock(b){
   return el("div",{class:"block"},el("div",{class:"t"},b.etiket),
@@ -376,7 +385,7 @@ function ozetSatir(b){
   const parcalar=[];
   if(b.yazilan!=null && b.toplam) parcalar.push(el("span",{},el("b",{},"Önbellek: "),
     b.onbellek ? `girdinin %${Math.round(100*b.onbellek/b.toplam)} kadarı önbellekten` : "ilk çağrı, tamamı önbelleğe yazıldı"));
-  if(b.kredi) parcalar.push(el("span",{},el("b",{},"Maliyet: "),`${aiu(b.kredi.toplam)} AIU`));
+  if(b.kredi) parcalar.push(el("span",{},el("b",{},"Maliyet: "),`${aiu(b.kredi.toplam)} AI kredisi (≈ ${usd(b.kredi.toplam)})`));
   if(!parcalar.length) return null;
   parcalar.push(el("span",{class:"alt"},"ayrıntılar mesajların altında"));
   return el("div",{class:"ozetsatir"},...parcalar);
