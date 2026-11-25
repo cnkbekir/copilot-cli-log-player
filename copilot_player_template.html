@@ -103,6 +103,12 @@ h1{font-size:17px;margin:0;font-weight:650;flex:1 1 220px;min-width:0;white-spac
 #panel{background:var(--panel);overflow:auto;padding:8px 22px 22px}
 html.panel-gizli #dock{display:none}
 #panel h2{margin:0 0 4px;font-size:18px}
+#dock{position:relative}
+#panel{padding-bottom:64px}
+/* Panelin içeriği kaysa da sağ altta sabit durur */
+.tumu{position:absolute;bottom:16px;right:30px;z-index:4;box-shadow:0 2px 8px rgba(0,0,0,.15);border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:6px 14px;min-height:36px;cursor:pointer;font-size:13.5px}
+.tumu:hover{border-color:var(--accent)}
+.tumu[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 #panel .exp{margin:0 0 12px;color:var(--muted);max-width:980px}
 .block{margin:10px 0}
 .block>.t{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
@@ -144,7 +150,7 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;paddi
     <button id="prev" title="Önceki (←)">←</button>
     <div class="counter" id="counter"></div>
     <button id="next" title="Sonraki (→)">→</button>
-    <span class="hint"><kbd>←</kbd><kbd>→</kbd> adım · <kbd>1</kbd>–<kbd>5</kbd> seviye · <kbd>P</kbd> örnek · <kbd>F</kbd> sunum · <kbd>H</kbd> panel · <kbd>T</kbd> tema · <kbd>+</kbd><kbd>−</kbd> yazı</span>
+    <span class="hint"><kbd>←</kbd><kbd>→</kbd> adım · <kbd>1</kbd>–<kbd>5</kbd> seviye · <kbd>P</kbd> örnek · <kbd>F</kbd> sunum · <kbd>H</kbd> panel · <kbd>A</kbd> tümünü aç · <kbd>T</kbd> tema · <kbd>+</kbd><kbd>−</kbd> yazı</span>
   </div>
   <div class="icons">
     <button class="ibtn" id="btn-panel"></button>
@@ -159,6 +165,8 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;paddi
 <div id="dock">
   <div id="resizer" role="separator" aria-orientation="horizontal" tabindex="0"
        aria-label="Alt paneli yeniden boyutlandır: sürükleyin ya da ↑ ↓ tuşları" title="Sürükleyerek boyutlandırın (↑ ↓)"></div>
+  <button class="tumu" id="btn-tumu" type="button" aria-pressed="false"
+          title="Bu paneldeki tüm mesaj kutularını ve ayrıntıları aç/kapat (A)">Tümünü aç</button>
   <section id="panel" aria-label="Adım ayrıntısı"></section>
 </div>
 <div id="live" class="sr-only" aria-live="polite"></div>
@@ -298,17 +306,33 @@ function contextBlock(b){
   wrap.append(msgs);
   return wrap;
 }
+function renderBlock(b){ return b.tur==="baglam" ? contextBlock(b) : textBlock(b); }
+// "Tümünü aç": tercih adımlar arasında korunur; her yeni adımda kutular buna göre açılır
+function applyTumu(P){
+  P.querySelectorAll(".msg pre:not(.kisa)").forEach(p=>{ p.classList.toggle("open",!!ui.tumuAcik); p.setAttribute("aria-expanded",String(!!ui.tumuAcik)); });
+  P.querySelectorAll("details").forEach(d=>{ d.open=!!ui.tumuAcik; });
+}
+function toggleTumu(){
+  ui.tumuAcik=!ui.tumuAcik; saveUi();
+  applyTumu(document.getElementById("panel")); syncTumuBtn();
+  document.getElementById("live").textContent = ui.tumuAcik ? "Tüm ayrıntılar açıldı" : "Ayrıntılar kapatıldı";
+}
+function syncTumuBtn(){
+  const b=document.getElementById("btn-tumu");
+  b.textContent=ui.tumuAcik?"Tümünü kapat":"Tümünü aç"; b.setAttribute("aria-pressed",String(!!ui.tumuAcik));
+}
 function renderPanel(x){
   const P=document.getElementById("panel");
   if(!x){P.replaceChildren();return;}
   P.replaceChildren(el("h2",{},x.baslik), el("p",{class:"exp"},x.aciklama),
-    ...x.detay.filter(b=>!b.seviye||b.seviye<=st.lvl).map(b=>b.tur==="baglam"?contextBlock(b):textBlock(b)));
+    ...x.detay.filter(b=>!b.seviye||b.seviye<=st.lvl).map(renderBlock));
   // Tamamı zaten görünen kısa mesajlar açılır düğme gibi davranmasın
   P.querySelectorAll(".msg pre").forEach(p=>{
     if(p.scrollHeight<=p.clientHeight+2){
       p.classList.add("kisa"); ["role","tabindex","aria-expanded","aria-label"].forEach(a=>p.removeAttribute(a));
     }
   });
+  applyTumu(P);
   P.scrollTop=0;
   const yeni=P.querySelector(".msg.yeni");
   const head=P.querySelector(".ctxhead");
@@ -392,6 +416,7 @@ function applyPanelH(){ if(ui.panelH) document.documentElement.style.setProperty
   });
 })();
 applyPanelH();
+document.getElementById("btn-tumu").onclick=toggleTumu; syncTumuBtn();
 
 document.getElementById("prev").onclick=()=>{st.i--;render();};
 document.getElementById("next").onclick=()=>{st.i++;render();};
@@ -409,6 +434,7 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="f"||e.key==="F"){e.preventDefault();setSunum(!document.documentElement.classList.contains("sunum"));}
   else if(e.key==="t"||e.key==="T"){cycleTheme();}
   else if(e.key==="h"||e.key==="H"){togglePanel();}
+  else if(e.key==="a"||e.key==="A"){toggleTumu();}
   else if(e.key==="+"||e.key==="="){ui.zoom=Math.min(2,+(ui.zoom+0.1).toFixed(2));saveUi();applyZoom();render();}
   else if(e.key==="-"||e.key==="_"){ui.zoom=Math.max(1,+(ui.zoom-0.1).toFixed(2));saveUi();applyZoom();render();}
 });

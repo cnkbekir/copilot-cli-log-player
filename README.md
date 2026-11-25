@@ -96,6 +96,7 @@ egitim.html#ornek=3&seviye=4&adim=8&panel=0&tema=light&sunum=1
 | `+` `−` | Sunum modunda yazı boyutu |
 | `T` | Tema: otomatik → açık → koyu |
 | `H` | Alt paneli gizle / göster |
+| `A` | Alt paneldeki tüm mesaj kutularını ve ayrıntıları aç / kapat (adımlar arasında korunur) |
 
 Bir satıra tıklamak o adıma gider; alt paneldeki uzun metin kutularına tıklamak tamamını açar.
 
