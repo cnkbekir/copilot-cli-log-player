@@ -98,6 +98,7 @@ egitim.html#ornek=3&seviye=4&adim=8&panel=0&aciklama=0&tema=light&sunum=1
 | Tuş | İşlev |
 |---|---|
 | `←` `→` / `Space` | Önceki / sonraki adım |
+| `Shift` + `←` `→` | Önceki / sonraki LLM çağrısı (bağlamı hızlı karşılaştırmak için) |
 | `Home` `End` | İlk / son adım |
 | `1` – `5` | Seviye |
 | `P` | Sonraki örnek (prompt); tümü için üstteki **Örnek** listesi |
