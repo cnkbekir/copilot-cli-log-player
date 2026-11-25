@@ -78,7 +78,7 @@ egitim.html#ornek=3&seviye=4&adim=8&panel=0&tema=light&sunum=1
 |---|---|---|
 | 1 · LLM ile konuşma | Geliştirici, Copilot CLI, LLM | İstek → LLM → yanıt. Sistem prompt'u tek satır "gizli talimatlar" olarak görünür. |
 | 2 · Araç döngüsü | + Araçlar | tool_call → araç → sonuç → tekrar LLM. Skill / VS Code / MCP araçları da "Araçlar" sütununda. |
-| 3 · Bağlam | (aynı) | Token çubuğu, sistem prompt'unun bölümleri, CLI'ın prompt'a eklediği metinler, modelin düşünce özeti |
+| 3 · Bağlam | (aynı) | Token çubuğu, önbellek (cache) kullanımı, sistem prompt'unun bölümleri, CLI'ın prompt'a eklediği metinler, modelin düşünce özeti |
 | 4 · Skill & MCP | + Skill, VS Code, MCP | SKILL.md'nin yüklenmesi, `tool_search_tool`, MCP sunucusu |
 | 5 · Hooks & dahası | + Hooks, Yan LLM | Tüm hook'lar (girdi/çıktı), ana modelden ayrı çalışan küçük modeller |
 
@@ -104,7 +104,7 @@ Bir satıra tıklamak o adıma gider; alt paneldeki uzun metin kutularına tıkl
 
 | Değer | Kaynak |
 |---|---|
-| Bir çağrının toplam girdi/çıktı token'ı, önbellekten okunan token | Ölçülmüş (`session.usage_record`) |
+| Bir çağrının toplam girdi/çıktı token'ı, önbellekten okunan ve önbelleğe yazılan token | Ölçülmüş (`session.usage_record`) |
 | Araç tanımlarının token'ı ve araç sayısı | Ölçülmüş (`toolTokenCount`, `availableToolCount`) |
 | Sistem prompt'unun token karşılığı | Hesaplanmış: ilk LLM çağrısının araç dışı girdisi |
 | Sistem prompt'u bölümleri, tek tek mesajların token'ı | **Tahmin:** karakter sayısı × logdan çıkarılan karakter/token oranı |

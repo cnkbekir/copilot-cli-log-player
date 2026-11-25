@@ -117,6 +117,7 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--soft);b
 .bar{display:flex;height:26px;border-radius:7px;overflow:hidden;border:1px solid var(--line);margin:6px 0 4px}
 .bar div{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--on-c);white-space:nowrap;overflow:hidden;min-width:2px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted)}
+.note{margin:6px 0 0;font-size:13.5px;color:var(--muted);max-width:980px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .msgs{display:grid;gap:6px;margin-top:8px}
 .msg{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--panel)}
@@ -275,6 +276,22 @@ function render(){
 function textBlock(b){
   return el("div",{class:"block"+(b.vurgu?" vurgu":"")},el("div",{class:"t"},b.etiket),el("pre",{},b.metin||"(boş)"));
 }
+// Önbellek: girdinin ne kadarı önbellekten okundu, ne kadarı önbelleğe yazıldı
+function cacheBlock(b){
+  const okunan=b.onbellek||0, yazilan=b.yazilan||0, diger=Math.max(b.toplam-okunan-yazilan,0);
+  const parts=[["Önbellekten okundu",okunan,"var(--c-frontend)"],["Önbelleğe yazıldı",yazilan,"var(--c-side)"],["Önbelleksiz",diger,"var(--c-external)"]];
+  const oran=b.toplam?Math.round(100*okunan/b.toplam):0;
+  const ttl=b.onbellek_ttl?` Önbellek ${Math.round(b.onbellek_ttl/60)} dakika geçerli.`:"";
+  const yorum = okunan===0
+    ? `Bu çağrıda önbellekten hiçbir şey okunmadı: girdinin tamamı işlendi ve sonraki çağrılar için önbelleğe yazıldı.${ttl}`
+    : `Girdinin %${oran} kadarı önbellekten okundu; yalnızca son çağrıdan bu yana eklenenler yeniden işlendi.${ttl}`;
+  return el("div",{class:"block cache"},
+    el("div",{class:"t"},"Önbellek (prompt cache)"),
+    el("div",{class:"bar",role:"img","aria-label":parts.map(([n,v])=>`${n} ${fmt(v)} token`).join(", ")},
+      ...parts.map(([n,v,c])=>el("div",{style:`flex:${Math.max(v,0.0001)};background:${c}`,title:`${n}: ${fmt(v)}`},v/b.toplam>.12?`${n} ${fmt(v)}`:""))),
+    el("div",{class:"legend"},...parts.map(([n,v,c])=>el("span",{},el("i",{style:`background:${c}`}),`${n}: ${fmt(v)} token`))),
+    el("p",{class:"note"},yorum));
+}
 function contextBlock(b){
   const wrap=el("div",{class:"block"});
   if(st.lvl>=3){
@@ -284,6 +301,7 @@ function contextBlock(b){
       el("div",{class:"t"},`LLM'e giden toplam: ${fmt(b.toplam)} token · ${fmt(b.onbellek)} önbellekten`),
       el("div",{class:"bar",role:"img","aria-label":parts.map(([n,v])=>`${n} ${fmt(v)} token`).join(", ")},...parts.map(([n,v,c])=>el("div",{style:`flex:${Math.max(v,1)};background:${c}`,title:`${n}: ${fmt(v)}`},v/b.toplam>.12?`${n} ${fmt(v)}`:""))),
       el("div",{class:"legend"},...parts.map(([n,v,c])=>el("span",{},el("i",{style:`background:${c}`}),`${n}: ${fmt(v)} token (%${(100*v/b.toplam).toFixed(1)})`)))));
+    if(b.yazilan!=null) wrap.append(cacheBlock(b));
     const det=el("details",{},el("summary",{},`Sistem prompt'unun içi (her çağrıda aynı, ≈${fmt(b.sistem)} token) ve ${b.arac_sayisi} araç tanımı (${fmt(b.araclar)} token)`),
       el("div",{class:"sections"},...b.sistem_bolumleri.slice(0,14).map(x=>el("span",{},el("em",{},x.ad),`≈${fmt(x.token)}`))));
     wrap.append(det);

@@ -170,7 +170,9 @@ def uret(events):
             yeni_tok = sum(it["token"] for it in items if it["yeni"])
             baglam = {"tur": "baglam", "toplam": tin, "onbellek": u.get("cacheReadTokens", 0), "araclar": tools_tok,
                       "arac_sayisi": u.get("availableToolCount", 0), "sistem": sys_tok, "sistem_bolumleri": sys_sections,
-                      "gecmis": hist_tok, "ogeler": items}
+                      "gecmis": hist_tok, "ogeler": items,
+                      # Önbellek: eski loglarda cacheWriteTokens olmayabilir (None → gösterilmez)
+                      "yazilan": u.get("cacheWriteTokens"), "onbellek_ttl": u.get("cacheTtlSeconds")}
             n_new = sum(1 for it in items if it["yeni"])
             add("cli", "llm", 1, f"LLM çağrısı {ci + 1}", f"LLM çağrısı {ci + 1}: CLI bağlamı LLM'e gönderir",
                 ("LLM'in hafızası yoktur: her çağrıda konuşmanın tamamı yeniden gönderilir. " if ci or pn > 1 else "")
