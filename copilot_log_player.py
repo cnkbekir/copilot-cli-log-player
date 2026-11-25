@@ -46,6 +46,21 @@ def kredi(u):
     return {"toplam": cu["totalNanoAiu"], "satirlar": satir}
 
 
+# Oynatıcının işlediği ya da bilerek göstermediği olay türleri. Bunların dışındakiler son adımda
+# (Seviye 5) "gösterilmeyen olaylar" olarak listelenir ve üretim sırasında uyarı basılır.
+BILINEN_OLAYLAR = {
+    # gösterilenler
+    "user.message", "assistant.turn_start", "assistant.turn_end", "assistant.message",
+    "tool.execution_start", "tool.execution_complete", "external_tool.requested", "external_tool.completed",
+    "hook.start", "hook.end", "skill.invoked", "subagent.started", "subagent.completed", "human_response.recorded",
+    "session.usage_record", "session.usage_checkpoint", "system.message", "session.auto_mode_resolved",
+    # bilerek gösterilmeyenler (oturum yönetimi, telemetri, kopya bilgi)
+    "session.start", "session.resume", "session.shutdown", "session.permissions_changed",
+    "instruction.update", "skill.context_delivered_ref", "subagent.deselected",
+}
+BILINEN_ONEKLER = ("model.",)  # yan model olayları (model.turn_started, model.messages_snapshot, …)
+
+
 def olcekle(items, hedef, sifreli=0):
     """Mesajların karakterden tahmin edilen token toplamını, ölçülen konuşma toplamıyla (hedef) eşitler.
 
@@ -123,6 +138,7 @@ def uret(events):
             conv.append((i, {"rol": "skill", "baslik": f"Skill içeriği: {d.get('name')}", "metin": kes(c), "token": tok(len(c)), "seviye": 4}))
 
     out = []
+    uyarilar = []  # (prompt no, olay türü, adet)
     for pn, p in enumerate(prompts, 1):
         evs = p["events"]
         rs = [i for i, e in enumerate(evs) if e["type"] in ("session.start", "session.resume")]
@@ -193,6 +209,8 @@ def uret(events):
         starts = {e["data"]["toolCallId"]: e["data"] for e in evs if e["type"] == "tool.execution_start"}
         comps = {e["data"]["toolCallId"]: e["data"] for e in evs if e["type"] == "tool.execution_complete"}
         ext = {e["data"].get("toolCallId") for e in evs if e["type"] == "external_tool.requested"}
+        alt_agent = {e["data"].get("toolCallId"): e["data"] for e in evs if e["type"] == "subagent.started"}
+        insan_cevap = {e["data"].get("toolCallId"): e["data"] for e in evs if e["type"] == "human_response.recorded"}
         skills = [e["data"] for e in evs if e["type"] == "skill.invoked"]
         tool_hooks = {}
         for e in evs:
@@ -251,7 +269,20 @@ def uret(events):
                         if h["data"]["hookType"] != "postToolUse":
                             hook_step(h)
                     sd = starts.get(cid, {})
-                    if sd.get("mcpServerName"):
+                    sub = alt_agent.get(cid)
+                    soru = cid in insan_cevap or r["name"] == "ask_user"
+                    if soru:
+                        # LLM kullanıcıya soru soruyor: araç çağrısı geliştiriciye gider, cevabı araç sonucu olarak döner
+                        tgt, tlabel = "user", "soru (ask_user)"
+                        acik = ("LLM ilerlemek için size bir soru soruyor. Bu da bir araç çağrısıdır: CLI soruyu ekranda gösterir, "
+                                "verdiğiniz cevap araç sonucu olarak bir sonraki LLM çağrısında bağlama girer.")
+                    elif sub:
+                        tgt, tlabel = "agent", sub.get("agentDisplayName") or sub.get("agentName") or r["name"]
+                        acik = (f"CLI işi ayrı bir alt agent'a ({tlabel}) devreder. Alt agent kendi LLM döngüsünü çalıştırır; "
+                                "ana LLM onun ara adımlarını değil, yalnızca bitince döndürdüğü sonucu görür.")
+                        if sub.get("agentDescription"):
+                            acik += f" Görevi: {kisalt(sub['agentDescription'], 160)}"
+                    elif sd.get("mcpServerName"):
                         tgt, tlabel = "mcp", sd.get("mcpToolName") or r["name"]
                         acik = f"Araç bir MCP sunucusunda ({sd['mcpServerName']}, {sd.get('mcpTransport', '?')}). CLI isteği JSON-RPC ile oraya iletir; sunucu Copilot'tan ayrı bir programdır."
                     elif cid in ext:
@@ -264,13 +295,29 @@ def uret(events):
                         acik = "Yerleşik araç: CLI bunu kendi içinde, sizin makinenizde çalıştırır."
                         if r["name"] == "skill":
                             acik = "Skill de bir araç gibi çağrılır: CLI skill dosyasını bulup içeriğini bağlama ekleyecek."
+                    if cid not in starts:
+                        # Araç hiç başlamadı: kullanıcı reddetmiş, hook engellemiş ya da tur iptal edilmiş olabilir
+                        add("cli", tgt, 2, f"{tlabel} (çalışmadı)", f"Araç çalıştırılmadı: {tlabel}",
+                            "LLM bu aracı istedi ama logda aracın başladığına dair olay yok. Kullanıcı onay vermemiş, "
+                            "bir hook engellemiş ya da tur iptal edilmiş olabilir.",
+                            [{"etiket": "İstenen argümanlar", "metin": kes(a, 1500)}], "arac")
+                        continue
                     add("cli", tgt, 2, tlabel, f"Araç çalışıyor: {tlabel}", acik,
                         [{"etiket": "Argümanlar", "metin": kes(a, 1500)}], "arac")
-                    c = comps.get(cid, {})
-                    res = (c.get("result") or {}).get("content", "")
-                    add(tgt, "cli", 2, "sonuç" if c.get("success", True) else "hata", "Araç sonucu CLI'a döner",
-                        "Sonuç metin olarak döner. LLM bunu hemen görmez: bir sonraki LLM çağrısında bağlama eklenecek.",
-                        [{"etiket": "Aracın döndürdüğü", "metin": kes(res), "vurgu": True}], "donus")
+                    c = comps.get(cid)
+                    if c is None:
+                        add(tgt, "cli", 2, "sonuç yok", "Araç sonucu logda yok",
+                            "Araç başladı ama bittiğine dair olay yok: yarıda kesilmiş ya da oturum kapanmış olabilir.",
+                            [], "donus")
+                    else:
+                        res = (c.get("result") or {}).get("content", "")
+                        hata = c.get("success") is False
+                        add(tgt, "cli", 2, "hata" if hata else ("cevap" if soru else "sonuç"),
+                            "Araç hata döndürdü" if hata else ("Geliştiricinin cevabı CLI'a döner" if soru else "Araç sonucu CLI'a döner"),
+                            ("Araç başarısız oldu; hata mesajı da bir sonuç gibi bir sonraki LLM çağrısında bağlama eklenir ve "
+                             "model ona göre yeni bir yol dener." if hata else
+                             "Sonuç metin olarak döner. LLM bunu hemen görmez: bir sonraki LLM çağrısında bağlama eklenecek."),
+                            [{"etiket": "Aracın döndürdüğü", "metin": kes(res), "vurgu": True}], "donus")
                     if r["name"] == "skill":
                         sk = next((s for s in skills if s.get("name") == (r.get("arguments") or {}).get("skill")), skills[0] if skills else None) if isinstance(r.get("arguments"), dict) else (skills[0] if skills else None)
                         if sk:
@@ -297,6 +344,17 @@ def uret(events):
                 hook_step(e)
         n_tools = len(comps)
         son_det = [{"etiket": "Ekranda görünen yanıt", "metin": kes(amsgs[-1]["data"].get("content", "") if amsgs else "")}]
+        # Oynatıcının tanımadığı olay türleri: sessizce atlanmasın, eğitmen görsün
+        taninmayan = {}
+        for e in evs:
+            t = e.get("type", "?")
+            if t not in BILINEN_OLAYLAR and not any(t.startswith(o) for o in BILINEN_ONEKLER):
+                taninmayan.setdefault(t, []).append(e)
+        if taninmayan:
+            uyarilar.extend((pn, t, len(v)) for t, v in taninmayan.items())
+            son_det.append({"tur": "ozet", "seviye": 5, "etiket": "Oynatıcının göstermediği olaylar (logda var)",
+                            "satirlar": [[t, f"{len(v)} kez · {kisalt(json.dumps(v[0].get('data', {}), ensure_ascii=False), 90)}"]
+                                         for t, v in sorted(taninmayan.items())]})
         # Prompt'un toplam maliyeti: çağrıların nanoAIU toplamı + premium istek farkı (checkpoint'lerden)
         nano = [((x["data"]["usage"].get("copilotUsage") or {}).get("totalNanoAiu")) for x in usage]
         if any(n is not None for n in nano):
@@ -320,7 +378,7 @@ def uret(events):
             son_det, "ana")
         out.append({"no": pn, "metin": kisalt(user.get("content", ""), 60), "adimlar": steps,
                     "ozet": {"llm": len(turn_starts), "arac": n_tools}})
-    return {"model": model, "oran": round(ratio, 2), "promptlar": out}
+    return {"model": model, "oran": round(ratio, 2), "promptlar": out, "uyarilar": uyarilar}
 
 
 def main():
@@ -339,6 +397,8 @@ def main():
             print(f"{i:>3}. {kisalt(p['user']['data'].get('content', ''), 70)}  ·  {n_llm} LLM, {n_tool} araç")
         return
     data = uret(events)
+    for pn, t, n in data.pop("uyarilar", []):
+        print(f"uyarı: prompt {pn}: oynatıcının tanımadığı olay '{t}' ({n} kez) gösterilmedi; Seviye 5'te son adımda listelenir.", file=sys.stderr)
     if a.promptlar:
         sec = set()
         for part in a.promptlar.split(","):

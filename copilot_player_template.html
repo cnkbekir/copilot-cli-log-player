@@ -198,8 +198,9 @@ const LANES = {
   skill: {ad:"Skill", alt:"SKILL.md", c:"database"},
   host:  {ad:"VS Code", alt:"dış araçlar", c:"external"},
   mcp:   {ad:"MCP sunucusu", alt:"ayrı program", c:"external"},
+  agent: {ad:"Alt agent", alt:"kendi LLM döngüsü", c:"database"},
 };
-const ORDER = ["user","cli","hooks","llm","side","tools","skill","host","mcp"];
+const ORDER = ["user","cli","hooks","llm","side","tools","skill","host","mcp","agent"];
 const LEVELS = ["LLM ile konuşma","Araç döngüsü","Bağlam","Skill & MCP","Hooks & dahası"];
 const ROLE = {user:["kullanıcı","frontend"], assistant:["LLM","cloud"], tool:["araç sonucu","messagebus"], skill:["skill","database"], gizli:["görünmeyen","external"]};
 const fmt = n => (n||0).toLocaleString("tr-TR");
@@ -209,7 +210,7 @@ let st = {p:0, lvl:1, i:0};
 try{ const s=JSON.parse(localStorage.getItem("copilot-player")||"{}"); if(s.lvl) st.lvl=s.lvl; if(s.p!=null && s.p<DATA.promptlar.length) st.p=s.p; }catch(e){}
 
 function lane(id){ // düşük seviyelerde skill/VS Code/MCP "Araçlar" sütununda görünür
-  if(st.lvl<4 && (id==="skill"||id==="host"||id==="mcp")) return "tools";
+  if(st.lvl<4 && (id==="skill"||id==="host"||id==="mcp"||id==="agent")) return "tools";
   return id;
 }
 function steps(){ return DATA.promptlar[st.p].adimlar.filter(s=>s.seviye<=st.lvl); }
