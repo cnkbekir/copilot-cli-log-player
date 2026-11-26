@@ -55,7 +55,7 @@ def promptlara_bol(events):
     alt agent bitince CLI ana agent'a ``system.notification`` gönderir ve kullanıcı bir şey
     yazmadan yeni bir tur açar; bu bildirim, alt agent'ı başlatan prompt'u yeniden açar."""
     prompts, current, pending = [], None, []
-    sahip = {}  # agentId → alt agent'ı başlatan prompt
+    sahip = {}  # agentId → subagent'ı başlatan prompt
     for e in events:
         t = e.get("type")
         aid = e.get("agentId")
@@ -89,7 +89,7 @@ def promptlara_bol(events):
 
 
 TR = {
-    "tools": "Araç kullanım talimatları",
+    "tools": "Tool kullanım kuralları",
     "code_change_instructions": "Kod değiştirme kuralları",
     "environment_limitations": "Ortam kısıtları",
     "file_folder_and_symbol_links": "Link biçimi kuralları",

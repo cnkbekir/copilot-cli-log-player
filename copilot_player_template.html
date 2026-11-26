@@ -194,26 +194,26 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;paddi
 const DATA = /*__DATA__*/null;
 const LANES = {
   user:  {ad:"Geliştirici", alt:"siz", c:"frontend"},
-  cli:   {ad:"Copilot CLI", alt:"LLM değil · kod", c:"backend"},
+  cli:   {ad:"Harness", alt:"Copilot CLI · LLM değil", c:"backend"},
   hooks: {ad:"Hooks", alt:"sizin komutlarınız", c:"security"},
   llm:   {ad:"LLM", alt:DATA.model, c:"cloud"},
   side:  {ad:"Yan LLM", alt:"küçük model", c:"side"},
-  tools: {ad:"Araçlar", alt:"bash, view…", c:"messagebus"},
+  tools: {ad:"Tools", alt:"bash, view…", c:"messagebus"},
   skill: {ad:"Skill", alt:"SKILL.md", c:"database"},
-  host:  {ad:"VS Code", alt:"dış araçlar", c:"external"},
+  host:  {ad:"VS Code", alt:"dış tool'lar", c:"external"},
   mcp:   {ad:"MCP sunucusu", alt:"ayrı program", c:"external"},
-  agent: {ad:"Alt agent", alt:"kendi LLM döngüsü", c:"database"},
+  agent: {ad:"Subagent", alt:"kendi agent loop'u", c:"database"},
 };
 const ORDER = ["user","cli","hooks","llm","side","tools","skill","host","mcp","agent"];
-const LEVELS = ["LLM ile konuşma","Araç döngüsü","Bağlam","Skill & MCP","Hooks & dahası"];
-const ROLE = {user:["kullanıcı","frontend"], assistant:["LLM","cloud"], tool:["araç sonucu","messagebus"], skill:["skill","database"], gizli:["görünmeyen","external"]};
+const LEVELS = ["LLM ile konuşma","Agent loop","Context","Skill & MCP","Hooks & dahası"];
+const ROLE = {user:["kullanıcı","frontend"], assistant:["LLM","cloud"], tool:["tool sonucu","messagebus"], skill:["skill","database"], gizli:["görünmeyen","external"]};
 const fmt = n => (n||0).toLocaleString("tr-TR");
 const col = c => `var(--c-${c})`;
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
 let st = {p:0, lvl:1, i:0};
 try{ const s=JSON.parse(localStorage.getItem("copilot-player")||"{}"); if(s.lvl) st.lvl=s.lvl; if(s.p!=null && s.p<DATA.promptlar.length) st.p=s.p; }catch(e){}
 
-function lane(id){ // düşük seviyelerde skill/VS Code/MCP "Araçlar" sütununda görünür
+function lane(id){ // düşük seviyelerde skill/VS Code/MCP "Tools" sütununda görünür
   if(st.lvl<4 && (id==="skill"||id==="host"||id==="mcp"||id==="agent")) return "tools";
   return id;
 }
@@ -232,7 +232,7 @@ function renderHeader(){
   const S=document.getElementById("prompt-select");
   if(!S.options.length){
     DATA.promptlar.forEach((p,k)=>S.append(el("option",{value:String(k)},
-      `${p.no}. ${p.metin} — ${p.ozet.llm} LLM${p.ozet.arac?`, ${p.ozet.arac} araç`:""}`)));
+      `${p.no}. ${p.metin} — ${p.ozet.llm} LLM${p.ozet.arac?`, ${p.ozet.arac} tool`:""}`)));
     S.addEventListener("change",()=>{st.p=+S.value;st.i=0;render();S.blur();});
   }
   S.value=String(st.p);
@@ -298,20 +298,20 @@ function textBlock(b){
 // Önbellek: girdinin ne kadarı önbellekten okundu, ne kadarı önbelleğe yazıldı
 function cacheBlock(b){
   const okunan=b.onbellek||0, yazilan=b.yazilan||0, diger=Math.max(b.toplam-okunan-yazilan,0);
-  const parts=[["Önbellekten okundu",okunan,"var(--c-frontend)"],["Önbelleğe yazıldı",yazilan,"var(--c-side)"],["Önbelleksiz",diger,"var(--c-external)"]];
+  const parts=[["Cache'ten okundu",okunan,"var(--c-frontend)"],["Cache'e yazıldı",yazilan,"var(--c-side)"],["Cache'siz",diger,"var(--c-external)"]];
   const oran=b.toplam?Math.round(100*okunan/b.toplam):0;
-  const ttl=b.onbellek_ttl?` Önbellek ${Math.round(b.onbellek_ttl/60)} dakika geçerli.`:"";
+  const ttl=b.onbellek_ttl?` Cache ${Math.round(b.onbellek_ttl/60)} dakika geçerli.`:"";
   const yorum = okunan===0
-    ? `Bu çağrıda önbellekten hiçbir şey okunmadı: girdinin tamamı işlendi ve sonraki çağrılar için önbelleğe yazıldı.${ttl}`
-    : `Girdinin %${oran} kadarı önbellekten okundu; yalnızca son çağrıdan bu yana eklenenler yeniden işlendi.${ttl}`;
+    ? `Bu çağrıda cache'ten hiçbir şey okunmadı: girdinin tamamı işlendi ve sonraki çağrılar için cache'e yazıldı.${ttl}`
+    : `Girdinin %${oran} kadarı cache'ten okundu; yalnızca son çağrıdan bu yana eklenenler yeniden işlendi.${ttl}`;
   return el("div",{class:"block cache"},
-    el("div",{class:"t"},"Önbellek (prompt cache)"),
+    el("div",{class:"t"},"Prompt cache"),
     el("div",{class:"bar",role:"img","aria-label":parts.map(([n,v])=>`${n} ${fmt(v)} token`).join(", ")},
       ...parts.map(([n,v,c])=>el("div",{style:`flex:${Math.max(v,0.0001)};background:${c}`,title:`${n}: ${fmt(v)}`},v/b.toplam>.12?`${n} ${fmt(v)}`:""))),
     el("div",{class:"legend"},...parts.map(([n,v,c])=>el("span",{},el("i",{style:`background:${c}`}),`${n}: ${fmt(v)} token`))),
     el("p",{class:"note"},yorum),
-    el("p",{class:"note"},"Her girdi token'ı bu üç parçadan yalnızca birinde sayılır ve bir kez ücretlendirilir. Önbelleğe yazılan token'lar da işlenir; ayrıca girdi ücreti ödenmez, yazma fiyatı ödenir."
-      + (diger>0 && diger<20 ? ` Önbelleksiz ${fmt(diger)} token, isteğin sonuna eklenen ve hiç saklanmayan küçük kısımdır (büyük olasılıkla "şimdi asistan yanıtlıyor" işaretleri): bir sonraki çağrı tam olarak önceki girdi − ${fmt(diger)} token'ı önbellekten okur.` : "")));
+    el("p",{class:"note"},"Her girdi token'ı bu üç parçadan yalnızca birinde sayılır ve bir kez ücretlendirilir. Cache'e yazılan token'lar da işlenir; ayrıca girdi ücreti ödenmez, yazma fiyatı ödenir."
+      + (diger>0 && diger<20 ? ` Cache'siz ${fmt(diger)} token, isteğin sonuna eklenen ve hiç saklanmayan küçük kısımdır (büyük olasılıkla "şimdi asistan yanıtlıyor" işaretleri): bir sonraki çağrı tam olarak önceki girdi − ${fmt(diger)} token'ı cache'ten okur.` : "")));
 }
 // Kredi: bu çağrının maliyeti token türüne göre (birimler logdaki gibi: 1 AIU = 10⁹ nanoAIU)
 // nanoAIU ÷ 10⁹ = AI kredisi (GitHub Copilot SDK belgesi); 1 kredi = 0,01 $ (fatura belgesi)
@@ -331,16 +331,16 @@ function krediBlock(k){
 }
 function krediNot(k){
   const b=t=>k.satirlar.find(s=>s.tur===t)?.birim;
-  const girdi=b("Önbelleksiz girdi"), okuma=b("Önbellekten okuma");
+  const girdi=b("Cache'siz girdi"), okuma=b("Cache'ten okuma");
   const notlar=[];
   if(girdi&&okuma){
     const kat=(girdi/okuma).toLocaleString("tr-TR",{maximumFractionDigits:1});
-    notlar.push(el("p",{class:"note"},`Önbellekten okumak, önbelleksiz girdiden ${kat} kat ucuz. Bu yüzden ilk çağrıdan sonra, bağlam büyüse de çağrılar çok daha ucuza gelir.`));
+    notlar.push(el("p",{class:"note"},`Cache'ten okumak, cache'siz girdiden ${kat} kat ucuz. Bu yüzden ilk çağrıdan sonra, context büyüse de çağrılar çok daha ucuza gelir.`));
   }
-  const yazma=b("Önbelleğe yazma");
+  const yazma=b("Cache'e yazma");
   if(girdi&&yazma&&okuma){
     const f=x=>x.toLocaleString("tr-TR",{maximumFractionDigits:2});
-    notlar.push(el("p",{class:"note"},`Önbelleğe yazmak normal girdiden ${f(yazma/girdi)} kat pahalı, ama yazılan kısım sonraki çağrıda ${f(okuma/girdi)} katına okunur. İki kez gönderilen bir parça önbelleksiz ${f(2)} birim, önbellekle ${f((yazma+okuma)/girdi)} birim tutar.`));
+    notlar.push(el("p",{class:"note"},`Cache'e yazmak normal girdiden ${f(yazma/girdi)} kat pahalı, ama yazılan kısım sonraki çağrıda ${f(okuma/girdi)} katına okunur. İki kez gönderilen bir parça cache'siz ${f(2)} birim, cache'le ${f((yazma+okuma)/girdi)} birim tutar.`));
   }
   notlar.push(el("p",{class:"note"},"Dönüşüm: logdaki nanoAIU ÷ 10⁹ = AI kredisi (GitHub Copilot SDK belgesi), 1 AI kredisi = 0,01 $ (GitHub fatura belgesi). "
     + (DATA.aylik_kredi ? `Aylık hak: ${fmt(DATA.aylik_kredi)} kredi. ` : "")
@@ -354,14 +354,14 @@ function ozetBlock(b){
 function contextBlock(b){
   const wrap=el("div",{class:"block"});
   if(st.lvl>=3){
-    const parts=[["Sistem prompt'u",b.sistem,"var(--c-backend)"],["Araç tanımları",b.araclar,"var(--c-messagebus)"],["Konuşma",b.gecmis,"var(--c-cloud)"]];
+    const parts=[["System prompt",b.sistem,"var(--c-backend)"],["Tool tanımları",b.araclar,"var(--c-messagebus)"],["Konuşma",b.gecmis,"var(--c-cloud)"]];
     // Token özeti panelin üstüne yapışık kalır; mesajlar kaydırılırken hep görünür
     wrap.append(el("div",{class:"ctxhead"},
-      el("div",{class:"t"},`LLM'e giden toplam: ${fmt(b.toplam)} token · ${fmt(b.onbellek)} önbellekten`),
+      el("div",{class:"t"},`LLM'e giden toplam: ${fmt(b.toplam)} token · ${fmt(b.onbellek)} cache'ten`),
       el("div",{class:"bar",role:"img","aria-label":parts.map(([n,v])=>`${n} ${fmt(v)} token`).join(", ")},...parts.map(([n,v,c])=>el("div",{style:`flex:${Math.max(v,1)};background:${c}`,title:`${n}: ${fmt(v)}`},v/b.toplam>.12?`${n} ${fmt(v)}`:""))),
       el("div",{class:"legend"},...parts.map(([n,v,c])=>el("span",{},el("i",{style:`background:${c}`}),`${n}: ${fmt(v)} token (%${(100*v/b.toplam).toFixed(1)})`))),
       ozetSatir(b)));
-    const det=el("details",{},el("summary",{},`Sistem prompt'unun içi (her çağrıda aynı, ≈${fmt(b.sistem)} token) ve ${b.arac_sayisi} araç tanımı (${fmt(b.araclar)} token)`),
+    const det=el("details",{},el("summary",{},`System prompt'un içi (her çağrıda aynı, ≈${fmt(b.sistem)} token) ve ${b.arac_sayisi} tool tanımı (${fmt(b.araclar)} token)`),
       el("div",{class:"sections"},...b.sistem_bolumleri.slice(0,14).map(x=>el("span",{},el("em",{},x.ad),`≈${fmt(x.token)}`))));
     wrap.append(det);
   }
@@ -371,8 +371,8 @@ function contextBlock(b){
     b.olcekli==="fark"
       ? `Mesaj token'ları karakter sayısından tahmin. Ölçülen konuşma toplamına (${fmt(b.gecmis)} token) kalan fark, en alttaki "görünmeyen kısım" satırında.`
       : `Mesaj token'ları karakter sayısından tahmin edilip ölçülen konuşma toplamına (${fmt(b.gecmis)} token) göre küçültüldü.`));
-  if(st.lvl<3) msgs.append(el("div",{class:"msg gizli"},"+ gizli sistem talimatları ve kullanılabilir araç listesi (Seviye 3'te açılır)"));
-  else msgs.append(el("div",{class:"msg"},el("div",{class:"h"},el("span",{class:"role",style:"--c:var(--c-backend)"},"system"),el("b",{},"Sistem prompt'u + araç tanımları"),el("span",{class:"tk"},`≈${fmt(b.sistem+b.araclar)} token`))));
+  if(st.lvl<3) msgs.append(el("div",{class:"msg gizli"},"+ gizli system prompt ve kullanılabilir tool listesi (Seviye 3'te açılır)"));
+  else msgs.append(el("div",{class:"msg"},el("div",{class:"h"},el("span",{class:"role",style:"--c:var(--c-backend)"},"system"),el("b",{},"System prompt + tool tanımları"),el("span",{class:"tk"},`≈${fmt(b.sistem+b.araclar)} token`))));
   for(const it of b.ogeler){
     if(it.rol==="gizli" && st.lvl<3) continue; // token hesabı ayrıntısı: yalnızca Seviye 3+
     const [rn,rc]=ROLE[it.rol]||[it.rol,"external"];
@@ -394,8 +394,8 @@ function contextBlock(b){
 // Yapışık başlıkta tek satır: önbellek oranı ve bu çağrının maliyeti (hep görünür)
 function ozetSatir(b){
   const parcalar=[];
-  if(b.yazilan!=null && b.toplam) parcalar.push(el("span",{},el("b",{},"Önbellek: "),
-    b.onbellek ? `girdinin %${Math.round(100*b.onbellek/b.toplam)} kadarı önbellekten` : "ilk çağrı, tamamı önbelleğe yazıldı"));
+  if(b.yazilan!=null && b.toplam) parcalar.push(el("span",{},el("b",{},"Cache: "),
+    b.onbellek ? `girdinin %${Math.round(100*b.onbellek/b.toplam)} kadarı cache'ten` : "ilk çağrı, tamamı cache'e yazıldı"));
   if(b.kredi) parcalar.push(el("span",{},el("b",{},"Maliyet: "),`${aiu(b.kredi.toplam)} AI kredisi (≈ ${usd(b.kredi.toplam)})`));
   if(!parcalar.length) return null;
   parcalar.push(el("span",{class:"alt"},"ayrıntılar mesajların altında"));

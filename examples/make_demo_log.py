@@ -59,19 +59,19 @@ SYSTEM = f"""You are an AI assistant using Copilot CLI. You help users with soft
 
 <tools>
 <bash>
-{rules("bash aracı", 60)}
+{rules("bash tool'u", 60)}
 </bash>
 <view>
-{rules("view aracı", 10)}
+{rules("view tool'u", 10)}
 </view>
 <skill>
-Skill'leri `skill` aracıyla yükle. Yalnızca adı ve açıklaması aşağıda; içeriği gerektiğinde yüklenir.
+Skill'leri `skill` tool'uyla yükle. Yalnızca adı ve açıklaması aşağıda; içeriği gerektiğinde yüklenir.
 </skill>
 <available_skills>
 {skill_list}
 {rules("Skill seçimi", 25)}
 </available_skills>
-{rules("Genel araç", 120)}
+{rules("Genel tool", 120)}
 </tools>
 
 <custom_instruction>
@@ -214,7 +214,7 @@ emit("skill.invoked", {"name": "react-ui", "path": f"{CWD}/.github/skills/react-
 conv_chars += len(SKILL_BODY)
 emit("assistant.turn_end", {"turnId": "0"})
 r = llm_call(1, tool_requests=[("tool_search_tool", {"query": "ui-docs MCP search components"})],
-             reasoning="Skill, ui-docs MCP'sindeki search-components aracını öneriyor. Önce aracı bulmalıyım; henüz bağlamımda yok.", out_tokens=60, think_ms=2600)
+             reasoning="Skill, ui-docs MCP'sindeki search-components tool'unu öneriyor. Önce tool'u bulmalıyım; henüz context'imde yok.", out_tokens=60, think_ms=2600)
 tool(r[0], '["ui-docs-search-components","ui-docs-get-component","ui-docs-get-example"]', external=True, dur=600)
 emit("assistant.turn_end", {"turnId": "1"})
 r = llm_call(2, tool_requests=[("ui-docs-search-components", {})], reasoning="Aracı buldum. Önce tüm bileşenleri listeleyeyim.", out_tokens=30, think_ms=3100)
@@ -236,7 +236,7 @@ stop()
 #    task aracı hemen döner → ana agent turunu bitirir → alt agent kendi bağlamıyla (başka modelde) çalışır
 #    → bitince CLI bildirim gönderir, LLM'e sormadan read_agent çağırır ve ana agent için yeni tur açar.
 SUB_ID, SUB_MODEL, SUB_NAME = "todo-audit", "demo-flash", "todo-audit"
-SUB_SYSTEM = "You are a general-purpose sub-agent of Copilot CLI. Complete the task you are given and report back.\n\n" + rules("Alt agent", 70)
+SUB_SYSTEM = "You are a general-purpose sub-agent of Copilot CLI. Complete the task you are given and report back.\n\n" + rules("Subagent", 70)
 sub_conv, sub_prev = 0, 0
 
 
@@ -271,12 +271,12 @@ def sub_llm(turn, content="", tool_requests=(), out_tokens=80, think_ms=2400):
 
 
 t_pad(20000)
-user("TODO yorumlarını tarayıp bir rapor hazırlaması için bir alt agent başlat")
+user("TODO yorumlarını tarayıp bir rapor hazırlaması için bir subagent başlat")
 TASK = ("src/ altındaki tüm TODO ve FIXME yorumlarını bul. Her biri için dosya, satır ve kısa açıklama ver; "
         "önem sırasına göre grupla. Kod değiştirme, yalnızca rapor yaz.")
 r = llm_call(0, tool_requests=[("task", {"description": "TODO raporu", "prompt": TASK, "agent_type": "general-purpose",
                                          "name": SUB_NAME, "mode": "background"})],
-             reasoning="Kullanıcı işi bir alt agent'a vermemi istiyor. Görevi tek başına anlaşılır yazmalıyım; alt agent bu konuşmayı görmeyecek.",
+             reasoning="Kullanıcı işi bir subagent'a vermemi istiyor. Görevi tek başına anlaşılır yazmalıyım; subagent bu konuşmayı görmeyecek.",
              out_tokens=120, think_ms=3000)
 task_id = r[0]["toolCallId"]
 emit("tool.execution_start", {"toolCallId": task_id, "toolName": "task", "arguments": r[0]["arguments"]}, 2)
@@ -314,7 +314,7 @@ emit("session.usage_record", {"usage": {
     "copilotUsage": {"totalNanoAiu": nano, "tokenDetails": [
         {"tokenType": k, "tokenCount": v, "batchSize": 1_000_000, "costPerBatch": PRICE[k] * 1_000_000, "model": MODEL}
         for k, v in counts.items()]}, "finishReason": "stop"}}, 1500)
-WAIT = f"`{SUB_NAME}` alt agent'ını arka planda başlattım. Bitince sonucu özetleyeceğim."
+WAIT = f"`{SUB_NAME}` subagent'ını arka planda başlattım. Bitince sonucu özetleyeceğim."
 emit("assistant.message", {"messageId": str(uuid.uuid4()), "content": WAIT, "toolRequests": [], "model": MODEL}, 2)
 conv_chars += len(WAIT)
 emit("assistant.turn_end", {"turnId": "1"})
@@ -356,7 +356,7 @@ emit("assistant.message", {"messageId": str(uuid.uuid4()), "content": "", "toolR
 emit("tool.execution_start", {"toolCallId": ra["toolCallId"], "toolName": "read_agent", "arguments": ra["arguments"]}, 2)
 emit("tool.execution_complete", {"toolCallId": ra["toolCallId"], "success": True, "result": {"content": REPORT}}, 3)
 conv_chars += len(REPORT)
-llm_call(0, "Alt agent raporu bitirdi: **4 TODO/FIXME** var. En önemlisi `src/api/client.ts:17`'deki sabit zaman aşımı. "
+llm_call(0, "Subagent raporu bitirdi: **4 TODO/FIXME** var. En önemlisi `src/api/client.ts:17`'deki sabit zaman aşımı. "
             "İstersen önce onu düzelteyim.", out_tokens=70, think_ms=2200)
 emit("assistant.turn_end", {"turnId": "0"})
 hook("agentStop", {"stopReason": "end_turn"})

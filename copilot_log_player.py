@@ -28,8 +28,8 @@ def args_str(a):
     return a if isinstance(a, str) else json.dumps(a, ensure_ascii=False, indent=2)
 
 
-KREDI_TUR = {"input": "Önbelleksiz girdi", "cache_read": "Önbellekten okuma",
-             "cache_write": "Önbelleğe yazma", "output": "Çıktı"}
+KREDI_TUR = {"input": "Cache'siz girdi", "cache_read": "Cache'ten okuma",
+             "cache_write": "Cache'e yazma", "output": "Çıktı"}
 
 
 def kredi(u):
@@ -79,7 +79,7 @@ def olcekle(items, hedef, sifreli=0):
         if hedef > toplam:
             aciklama = ("Ölçülen konuşma toplamı ile görünen mesajların tahmini arasındaki fark. "
                         "Bu kısım logda okunamaz: modelin önceki yanıtlarıyla birlikte geri gönderilen şifreli "
-                        "düşünce blokları, mesaj/araç çağrısı çerçeveleri ve CLI'ın eklediği sistem hatırlatmaları.")
+                        "düşünce blokları, mesaj/tool çağrısı çerçeveleri ve harness'ın eklediği sistem hatırlatmaları.")
             if sifreli:
                 aciklama += f" Bu çağrıya kadar {sifreli} yanıtta şifreli düşünce bloğu var."
             items.append({"rol": "gizli", "baslik": "Logda içeriği görünmeyen kısım", "metin": aciklama,
@@ -114,20 +114,20 @@ def dolar(kredi_):
 
 HOOK_ACIKLAMA = {
     "sessionStart": "Oturum açılırken çalışır.",
-    "userPromptSubmitted": "Prompt gönderildiğinde çalışır; bağlama ek metin ekleyebilir.",
+    "userPromptSubmitted": "Prompt gönderildiğinde çalışır; context'e ek metin ekleyebilir.",
     "userPromptTransformed": "Prompt'un LLM'e gidecek hali hazırlandığında çalışır.",
-    "preToolUse": "Araç çalışmadan önce çalışır; aracı engelleyebilir.",
-    "postToolUse": "Araç bittikten sonra çalışır.",
-    "postToolUseFailure": "Araç hata ile bittiğinde çalışır.",
+    "preToolUse": "Tool çalışmadan önce çalışır; tool'u engelleyebilir.",
+    "postToolUse": "Tool bittikten sonra çalışır.",
+    "postToolUseFailure": "Tool hata ile bittiğinde çalışır.",
     "preMcpToolCall": "MCP çağrısından hemen önce çalışan ek kapı.",
     "agentStop": "Agent turu bittiğinde çalışır.",
-    "subagentStart": "Alt agent başlarken çalışır.",
-    "subagentStop": "Alt agent bittiğinde çalışır.",
+    "subagentStart": "Subagent başlarken çalışır.",
+    "subagentStop": "Subagent bittiğinde çalışır.",
     "errorOccurred": "Bir hata oluştuğunda çalışır.",
 }
 
 MODEL_SECIMI = {
-    "agent_definition_default": "alt agent türünün kendi varsayılan modeli istendi",
+    "agent_definition_default": "subagent türünün kendi varsayılan modeli istendi",
     "session_inheritance": "oturumun modeli devralındı",
 }
 
@@ -205,7 +205,7 @@ def uret(events, aylik_kredi=None):
                                  "metin": kes(d.get("content", "")),
                                  "tam": kes(d.get("transformedContent", "")), "token": tok(len(d.get("transformedContent", "") or d.get("content", "")))}))
             elif t == "assistant.message":
-                kim = "CLI (otomatik)" if id(e) in sentetik else "LLM"
+                kim = "Harness (otomatik)" if id(e) in sentetik else "LLM"
                 for r in d.get("toolRequests") or []:
                     a = args_str(r.get("arguments"))
                     conv.append((i, {"rol": "assistant", "baslik": f"{kim}: tool_call → {r['name']}", "metin": kes(a, 1500), "token": tok(len(a))}))
@@ -213,13 +213,13 @@ def uret(events, aylik_kredi=None):
                     conv.append((i, {"rol": "assistant", "baslik": "LLM yanıtı", "metin": kes(d["content"]), "token": tok(len(d["content"]))}))
             elif t == "tool.execution_complete":
                 res = (d.get("result") or {}).get("content", "")
-                conv.append((i, {"rol": "tool", "baslik": f"Araç sonucu: {exec_name.get(d['toolCallId'], 'araç')}", "metin": kes(res), "token": tok(len(res))}))
+                conv.append((i, {"rol": "tool", "baslik": f"Tool sonucu: {exec_name.get(d['toolCallId'], 'tool')}", "metin": kes(res), "token": tok(len(res))}))
             elif t == "skill.invoked":
                 c = d.get("content", "")
                 conv.append((i, {"rol": "skill", "baslik": f"Skill içeriği: {d.get('name')}", "metin": kes(c), "token": tok(len(c)), "seviye": 4}))
             elif t == "system.notification":
                 c = d.get("content", "")
-                conv.append((i, {"rol": "user", "baslik": "CLI bildirimi (kullanıcı yazmadı)", "metin": kes(c), "token": tok(len(c))}))
+                conv.append((i, {"rol": "user", "baslik": "Harness bildirimi (kullanıcı yazmadı)", "metin": kes(c), "token": tok(len(c))}))
         return conv
 
     conv_ana = konusma(ana_tum)
@@ -271,9 +271,9 @@ def uret(events, aylik_kredi=None):
             det = [{"etiket": "Hook'a giden girdi", "metin": kes(json.dumps({k_: v for k_, v in d.get("input", {}).items() if k_ not in ("sessionId", "timestamp", "cwd", "transcriptPath")}, ensure_ascii=False, indent=2), 1500)}]
             if outp:
                 det.append({"etiket": "Hook'un döndürdüğü", "metin": kes(json.dumps(outp, ensure_ascii=False, indent=2), 1500), "vurgu": True})
-            alt = " (alt agent)" if e.get("agentId") else ""
+            alt = " (subagent)" if e.get("agentId") else ""
             add("cli", "hooks", 5, ht + alt, f"Hook{alt}: {ht}",
-                f"{HOOK_ACIKLAMA.get(ht, '')} Hook'lar sizin tanımladığınız deterministik komutlardır; LLM değildir." + (" Bu hook bağlama metin ekledi." if outp.get("additionalContext") else ""),
+                f"{HOOK_ACIKLAMA.get(ht, '')} Hook'lar sizin tanımladığınız deterministik komutlardır; LLM değildir." + (" Bu hook context'e metin ekledi." if outp.get("additionalContext") else ""),
                 det, "hook", k)
 
         def kendi_ya_da_prompt(e):
@@ -285,12 +285,12 @@ def uret(events, aylik_kredi=None):
         eklenen = user.get("transformedContent", "").replace(user.get("content", ""), "").strip()
         det = [{"etiket": "Yazdığınız", "metin": kes(user.get("content", "")), "vurgu": True}]
         if eklenen:
-            det.append({"etiket": "CLI'ın eklediği (LLM bunları da görecek)", "metin": kes(eklenen), "seviye": 3})
+            det.append({"etiket": "Harness'ın eklediği (LLM bunları da görecek)", "metin": kes(eklenen), "seviye": 3})
         for e in ana:
             if e["type"] == "hook.start" and e["data"]["hookType"] == "sessionStart":
                 hook_step(e, kendi_ya_da_prompt(e) if idx[id(e)] > user_i else user_i - 0.5)
         add("user", "cli", 1, "prompt", "Geliştirici bir istek yazar",
-            f"“{kisalt(user.get('content', ''), 120)}” Copilot CLI'a gider. CLI bir LLM değildir: mesajı alır, LLM'e gönderilecek bağlamı hazırlar.", det, "ana")
+            f"“{kisalt(user.get('content', ''), 120)}” Copilot CLI'a gider. Harness bir LLM değildir: mesajı alır, LLM'e gönderilecek context'i hazırlar.", det, "ana")
         for e in ana:
             if e["type"] == "hook.start" and e["data"]["hookType"] in ("userPromptSubmitted", "userPromptTransformed"):
                 hook_step(e, kendi_ya_da_prompt(e))
@@ -347,51 +347,51 @@ def uret(events, aylik_kredi=None):
             if soru:
                 # LLM kullanıcıya soru soruyor: araç çağrısı geliştiriciye gider, cevabı araç sonucu olarak döner
                 tgt, tlabel = "user", "soru (ask_user)"
-                acik = ("LLM ilerlemek için size bir soru soruyor. Bu da bir araç çağrısıdır: CLI soruyu ekranda gösterir, "
-                        "verdiğiniz cevap araç sonucu olarak bir sonraki LLM çağrısında bağlama girer.")
+                acik = ("LLM ilerlemek için size bir soru soruyor. Bu da bir tool çağrısıdır: harness soruyu ekranda gösterir, "
+                        "verdiğiniz cevap tool sonucu olarak bir sonraki LLM çağrısında context'e girer.")
             elif sub:
                 sd_ = sub["data"]
                 tgt, tlabel = "agent", sd_.get("agentDisplayName") or sd_.get("agentName") or r["name"]
-                acik = (f"CLI işi ayrı bir alt agent'a ({tlabel}, tür: {sd_.get('agentName', '?')}) devreder. Alt agent ayrı bir LLM oturumudur: "
-                        "ana konuşmayı görmez, yalnızca ana LLM'in yazdığı görev metnini alır. Kendi LLM döngüsünü çalıştırır; "
+                acik = (f"Harness işi ayrı bir subagent'a ({tlabel}, tür: {sd_.get('agentName', '?')}) devreder. Subagent ayrı bir LLM oturumudur: "
+                        "ana konuşmayı görmez, yalnızca ana LLM'in yazdığı görev metnini alır. Kendi agent loop'unu çalıştırır; "
                         "ana LLM onun ara adımlarını değil, yalnızca sonucunu görür.")
                 if sd_.get("agentDescription"):
                     acik += f" Görevi: {kisalt(sd_['agentDescription'], 160)}"
             elif r["name"] in ("read_agent", "write_agent", "list_agents"):
                 tgt, tlabel = "agent", r["name"]
-                acik = {"read_agent": "Alt agent'ın durumunu ve ürettiği sonucu okur. Alt agent'ın sonucu ana bağlama kendiliğinden girmez; bu araçla okunur.",
-                        "write_agent": "Çalışan bir alt agent'a ek mesaj gönderir (aynı görevin devamı).",
-                        "list_agents": "Çalışan alt agent'ları listeler."}[r["name"]]
+                acik = {"read_agent": "Subagent'ın durumunu ve ürettiği sonucu okur. Subagent'ın sonucu ana context'e kendiliğinden girmez; bu tool'la okunur.",
+                        "write_agent": "Çalışan bir subagent'a ek mesaj gönderir (aynı görevin devamı).",
+                        "list_agents": "Çalışan subagent'ları listeler."}[r["name"]]
             elif sd.get("mcpServerName"):
                 tgt, tlabel = "mcp", sd.get("mcpToolName") or r["name"]
-                acik = f"Araç bir MCP sunucusunda ({sd['mcpServerName']}, {sd.get('mcpTransport', '?')}). CLI isteği JSON-RPC ile oraya iletir; sunucu Copilot'tan ayrı bir programdır."
+                acik = f"Tool bir MCP sunucusunda ({sd['mcpServerName']}, {sd.get('mcpTransport', '?')}). Harness isteği JSON-RPC ile oraya iletir; sunucu Copilot'tan ayrı bir programdır."
             elif cid in ext:
                 tgt, tlabel = "host", r["name"]
-                acik = "Bu araç CLI'ın içinde değil, onu çalıştıran VS Code tarafında tanımlı (external_tool)."
+                acik = "Bu tool harness'ın içinde değil, onu çalıştıran VS Code tarafında tanımlı (external_tool)."
                 if r["name"] == "tool_search_tool":
-                    acik += " tool_search_tool, baştan bağlamda olmayan araçları (ör. MCP araçları) bulmak için kullanılır."
+                    acik += " tool_search_tool, baştan context'te olmayan tool'ları (ör. MCP tool'ları) bulmak için kullanılır."
             else:
                 tgt, tlabel = "tools", r["name"]
-                acik = "Yerleşik araç: CLI bunu kendi içinde, sizin makinenizde çalıştırır."
+                acik = "Yerleşik tool: harness bunu kendi içinde, sizin makinenizde çalıştırır."
                 if r["name"] == "skill":
-                    acik = "Skill de bir araç gibi çağrılır: CLI skill dosyasını bulup içeriğini bağlama ekleyecek."
+                    acik = "Skill de bir tool gibi çağrılır: harness skill dosyasını bulup içeriğini context'e ekleyecek."
             if cid not in starts:
                 # Araç hiç başlamadı: kullanıcı reddetmiş, hook engellemiş ya da tur iptal edilmiş olabilir
-                add(kaynak, tgt, sev, f"{tlabel} (çalışmadı)", f"Araç çalıştırılmadı: {tlabel}",
-                    "LLM bu aracı istedi ama logda aracın başladığına dair olay yok. Kullanıcı onay vermemiş, "
+                add(kaynak, tgt, sev, f"{tlabel} (çalışmadı)", f"Tool çalıştırılmadı: {tlabel}",
+                    "LLM bu tool'u istedi ama logda tool'un başladığına dair olay yok. Kullanıcı onay vermemiş, "
                     "bir hook engellemiş ya da tur iptal edilmiş olabilir.",
                     [{"etiket": "İstenen argümanlar", "metin": kes(a, 1500)}], "arac")
                 return
             if cli_istedi:
-                tlabel = f"{tlabel} (CLI)"
-                acik = ("Bu çağrıyı LLM istemedi; öncesinde LLM çağrısı yok. Alt agent bitince CLI sonucunu kendisi okur, "
+                tlabel = f"{tlabel} (harness)"
+                acik = ("Bu çağrıyı LLM istemedi; öncesinde LLM çağrısı yok. Subagent bitince harness sonucunu kendisi okur, "
                         "çağrıyı ve sonucunu konuşmaya ekler. Ana LLM bir sonraki çağrıda ikisini de görür.")
-            add(kaynak, tgt, sev, tlabel, ("CLI kendisi bir araç çağırır: " if cli_istedi else "Araç çalışıyor: ") + tlabel, acik,
+            add(kaynak, tgt, sev, tlabel, ("Harness kendisi bir tool çağırır: " if cli_istedi else "Tool çalışıyor: ") + tlabel, acik,
                 [{"etiket": "Argümanlar", "metin": kes(a, 1500)}], "arac")
             c = comps.get(cid)
             if c is None:
-                add(tgt, kaynak, sev, "sonuç yok", "Araç sonucu logda yok",
-                    "Araç başladı ama bittiğine dair olay yok: yarıda kesilmiş ya da oturum kapanmış olabilir.",
+                add(tgt, kaynak, sev, "sonuç yok", "Tool sonucu logda yok",
+                    "Tool başladı ama bittiğine dair olay yok: yarıda kesilmiş ya da oturum kapanmış olabilir.",
                     [], "donus")
             else:
                 c = c["data"]
@@ -399,16 +399,16 @@ def uret(events, aylik_kredi=None):
                 hata = c.get("success") is False
                 arka_plan = bool(sub) and res.startswith("Agent started in background")
                 if arka_plan:
-                    add(tgt, kaynak, sev, "arka planda başladı", "Alt agent arka planda başladı",
-                        "task aracı alt agent'ı başlatıp hemen döner; dönen şey sonuç değil, alt agent'ın kimliği. "
-                        "Ana LLM beklemez: kullanıcıya bekleneceğini söyleyip turunu bitirir. Alt agent bitince CLI haber verir.",
+                    add(tgt, kaynak, sev, "arka planda başladı", "Subagent arka planda başladı",
+                        "task tool'u subagent'ı başlatıp hemen döner; dönen şey sonuç değil, subagent'ın kimliği. "
+                        "Ana LLM beklemez: kullanıcıya bekleneceğini söyleyip turunu bitirir. Subagent bitince harness haber verir.",
                         [{"etiket": "Aracın döndürdüğü", "metin": kes(res), "vurgu": True}], "donus")
                 else:
                     add(tgt, kaynak, sev, "hata" if hata else ("cevap" if soru else "sonuç"),
-                        "Araç hata döndürdü" if hata else ("Geliştiricinin cevabı CLI'a döner" if soru else "Araç sonucu CLI'a döner"),
-                        ("Araç başarısız oldu; hata mesajı da bir sonuç gibi bir sonraki LLM çağrısında bağlama eklenir ve "
+                        "Tool hata döndürdü" if hata else ("Geliştiricinin cevabı harness'a döner" if soru else "Tool sonucu harness'a döner"),
+                        ("Tool başarısız oldu; hata mesajı da bir sonuç gibi bir sonraki LLM çağrısında context'e eklenir ve "
                          "model ona göre yeni bir yol dener." if hata else
-                         "Sonuç metin olarak döner. LLM bunu hemen görmez: bir sonraki LLM çağrısında bağlama eklenecek."),
+                         "Sonuç metin olarak döner. LLM bunu hemen görmez: bir sonraki LLM çağrısında context'e eklenecek."),
                         [{"etiket": "Aracın döndürdüğü", "metin": kes(res), "vurgu": True}], "donus")
             if r["name"] == "skill":
                 sk = next((s_ for s_ in skills if s_.get("name") == (r.get("arguments") or {}).get("skill")), skills[0] if skills else None) if isinstance(r.get("arguments"), dict) else (skills[0] if skills else None)
@@ -416,9 +416,9 @@ def uret(events, aylik_kredi=None):
                     path = sk.get("path", "")
                     rel = os.path.relpath(path, cwd) if cwd and path.startswith(cwd) else temizle(path)
                     add("cli", "skill", 4, "SKILL.md oku", f"Skill dosyası okunur: {rel}",
-                        "Şimdiye kadar bağlamda bu skill'in sadece adı ve açıklaması vardı. Model seçince tam içeriği yüklenir (kademeli yükleme).",
+                        "Şimdiye kadar context'te bu skill'in sadece adı ve açıklaması vardı. Model seçince tam içeriği yüklenir (kademeli yükleme).",
                         [{"etiket": "Dosya", "metin": rel}], "arac")
-                    add("skill", "cli", 4, "içerik → bağlama", "Skill içeriği bağlama eklenir",
+                    add("skill", "cli", 4, "içerik → context'e", "Skill içeriği context'e eklenir",
                         f"{len(sk.get('content', '')):,} karakter (≈{tok(len(sk.get('content', ''))):,} token) bir sonraki LLM çağrısına eklenecek.".replace(",", "."),
                         [{"etiket": "SKILL.md içeriği", "metin": kes(sk.get("content", ""), 2500)}], "donus")
             for h in hooks:
@@ -432,7 +432,7 @@ def uret(events, aylik_kredi=None):
             since = idx[id(tur_listesi[ci - 1][0])] if ci > 0 else user_i - 1
             baglam = baglam_kur(u, conv_ana, sifreli_ana, idx[id(tsr)], since, sum(s_["token"] for s_ in sys_sections), sys_sections)
             n_new = sum(1 for it in baglam["ogeler"] if it["yeni"])
-            add("cli", "llm", 1, f"LLM çağrısı {ci + 1}", f"LLM çağrısı {ci + 1}: CLI bağlamı LLM'e gönderir",
+            add("cli", "llm", 1, f"LLM çağrısı {ci + 1}", f"LLM çağrısı {ci + 1}: harness context'i LLM'e gönderir",
                 ("LLM'in hafızası yoktur: her çağrıda konuşmanın tamamı yeniden gönderilir. " if ci or pn > 1 else "")
                 + (f"Bu çağrıda yeni olan {n_new} öğe sarıyla işaretli." if ci else "Aşağıda LLM'e giden mesajlar var."),
                 [baglam], "llm")
@@ -443,8 +443,8 @@ def uret(events, aylik_kredi=None):
                     det = [{"etiket": "LLM'in döndürdüğü istek", "metin": json.dumps({"tool": r["name"], "arguments": r.get("arguments")}, ensure_ascii=False, indent=2), "vurgu": True}]
                     if reasoning:
                         det.insert(0, {"etiket": "Modelin düşünce özeti", "metin": kes(reasoning, 1500), "seviye": 3})
-                    add("llm", "cli", 2, f"tool_call: {r['name']}", f"LLM bir araç çağırmak istiyor: {r['name']}",
-                        "LLM aracı kendisi çalıştıramaz. Sadece 'şu aracı şu argümanlarla çağır' diyen bir istek döndürür; çalıştırmak CLI'ın işidir.",
+                    add("llm", "cli", 2, f"tool_call: {r['name']}", f"LLM bir tool istiyor: {r['name']}",
+                        "LLM tool'u kendisi çalıştıramaz. Sadece 'şu tool'u şu argümanlarla çağır' diyen bir istek döndürür; çalıştırmak harness'ın işidir.",
                         det, "donus")
                     arac_adimlari(r)
             else:
@@ -453,13 +453,13 @@ def uret(events, aylik_kredi=None):
                 if reasoning:
                     det.insert(0, {"etiket": "Modelin düşünce özeti", "metin": kes(reasoning, 1500), "seviye": 3})
                 add("llm", "cli", 1, "yanıt metni", "LLM metinle yanıt verir",
-                    f"Araç istemeden düz metin döndürdü ({out_tok} token). Bu, döngünün bittiği anlamına gelir.", det, "donus")
+                    f"Tool istemeden düz metin döndürdü ({out_tok} token). Bu, agent loop'un bittiği anlamına gelir.", det, "donus")
                 # Ana agent turunu bitirdi ama prompt sürüyor (ör. arka plandaki alt agent'ı bekliyor): ara yanıt
                 bitis = idx[id(tend)] if tend else idx[id(tsr)]
                 sonraki = idx[id(tur_listesi[ci + 1][0])] if ci + 1 < len(tur_listesi) else None
                 if sonraki is not None and any(bitis <= a_ < sonraki for a_ in agent_stop):
                     add("cli", "user", 1, "ara yanıt", "Ara yanıt geliştiriciye gösterilir",
-                        "Ana agent turunu bitirdi; ekrandaki yanıt bu. Ama iş bitmedi: arka plandaki alt agent bitince CLI, "
+                        "Ana agent turunu bitirdi; ekrandaki yanıt bu. Ama iş bitmedi: arka plandaki subagent bitince harness, "
                         "siz bir şey yazmadan ana agent'ı yeniden çalıştıracak.",
                         [{"etiket": "Ekranda görünen yanıt", "metin": kes(text)}], "ana")
 
@@ -468,7 +468,7 @@ def uret(events, aylik_kredi=None):
         for aid, aev in alt_ev.items():
             bas = next((e for e in aev if e["type"] == "subagent.started"), None)
             bd = bas["data"] if bas else {}
-            ad = bd.get("agentDisplayName") or bd.get("agentName") or "alt agent"
+            ad = bd.get("agentDisplayName") or bd.get("agentName") or "subagent"
             ayar = {}
             for e in aev:
                 if e["type"] in ("subagent.configured", "subagent.selected", "session.model_change"):
@@ -497,11 +497,11 @@ def uret(events, aylik_kredi=None):
                     satir.append(["Düşünme düzeyi", ayar["reasoningEffort"]])
                 if bd.get("modelSelectionSource"):
                     satir.append(["Model seçimi", f"{bd['modelSelectionSource']} ({MODEL_SECIMI.get(bd['modelSelectionSource'], '?')})"])
-                add("cli", "agent", 4, "görev", f"Alt agent görevini alır: {ad}",
-                    "Alt agent sıfırdan başlar: kendi sistem prompt'u ve bu görev metni dışında hiçbir şey bilmez. "
+                add("cli", "agent", 4, "görev", f"Subagent görevini alır: {ad}",
+                    "Subagent sıfırdan başlar: kendi system prompt'u ve bu görev metni dışında hiçbir şey bilmez. "
                     "Ana konuşmayı, sizin yazdıklarınızı görmez; ana LLM gereken her şeyi görev metnine yazmak zorundadır.",
                     [{"etiket": "Görev metni (ana LLM yazdı)", "metin": kes(gorev["data"].get("content", "")), "vurgu": True},
-                     {"tur": "ozet", "etiket": "Alt agent ayarları", "satirlar": satir}], "arac", idx[id(gorev)])
+                     {"tur": "ozet", "etiket": "Subagent ayarları", "satirlar": satir}], "arac", idx[id(gorev)])
             a_tur = turlar(aev)
             hatalar = [e for e in aev if e["type"] == "session.error"]
             for ci, (tsr, msgs, tend) in enumerate(a_tur):
@@ -513,8 +513,8 @@ def uret(events, aylik_kredi=None):
                     since = idx[id(a_tur[ci - 1][0])] if ci > 0 else (idx[id(gorev)] - 1 if gorev else -1)
                     det = [baglam_kur(u, a_conv, a_sifreli, ti, since, a_tok(len(a_sm)), a_bol)]
                 mdl = (u or {}).get("modelDisplayName") or (u or {}).get("model")
-                add("agent", "llm", 4, f"alt agent LLM çağrısı {ci + 1}", f"Alt agent kendi LLM çağrısını yapar ({ci + 1})",
-                    "Bu, ana konuşmadan bağımsız ayrı bir bağlam: alt agent'ın sistem prompt'u, araçları ve görevi. "
+                add("agent", "llm", 4, f"subagent LLM çağrısı {ci + 1}", f"Subagent kendi LLM çağrısını yapar ({ci + 1})",
+                    "Bu, ana konuşmadan bağımsız ayrı bir context: subagent'ın system prompt'u, tool'ları ve görevi. "
                     + (f"Model: {mdl} (ana agent'ınkinden farklı olabilir). " if mdl else "")
                     + ("Aşağıda bu çağrıda LLM'e giden mesajlar var." if u else "Bu çağrı için logda kullanım kaydı yok; çağrı başarısız olmuş olabilir."),
                     det, "llm", ti)
@@ -523,45 +523,45 @@ def uret(events, aylik_kredi=None):
                     if ti < idx[id(h)] <= bitis + 2:
                         hd = h["data"]
                         add("llm", "agent", 4, f"hata {hd.get('statusCode', '')}".strip(), "LLM çağrısı hata döndürdü",
-                            f"Model çağrısı başarısız oldu ({hd.get('errorCode', hd.get('errorType', '?'))}). Alt agent bu hatayla duruyor.",
+                            f"Model çağrısı başarısız oldu ({hd.get('errorCode', hd.get('errorType', '?'))}). Subagent bu hatayla duruyor.",
                             [{"etiket": "Hata", "metin": kes(hd.get("message", "")), "vurgu": True}], "donus", ti + 0.1)
                 reqs, text, reasoning = birlesik(msgs)
                 for r in reqs:
-                    add("llm", "agent", 4, f"tool_call: {r['name']}", f"Alt agent'ın LLM'i bir araç istiyor: {r['name']}",
-                        "Alt agent da aynı döngüyle çalışır: LLM araç ister, alt agent çalıştırır, sonuç bir sonraki çağrıya eklenir.",
+                    add("llm", "agent", 4, f"tool_call: {r['name']}", f"Subagent'ın LLM'i bir tool istiyor: {r['name']}",
+                        "Subagent da aynı agent loop'uyla çalışır: LLM tool ister, subagent çalıştırır, sonuç bir sonraki çağrıya eklenir.",
                         [{"etiket": "İstek", "metin": json.dumps({"tool": r["name"], "arguments": r.get("arguments")}, ensure_ascii=False, indent=2)}], "donus", ti + 0.2)
                     c = comps.get(r["toolCallId"])
                     if c is not None:
                         res = (c["data"].get("result") or {}).get("content", "")
-                        add("agent", "tools", 4, r["name"], f"Alt agent aracı çalıştırır: {r['name']}",
-                            "Alt agent'ın araç sonuçları yalnızca onun bağlamına girer, ana konuşmaya girmez.",
+                        add("agent", "tools", 4, r["name"], f"Subagent tool'u çalıştırır: {r['name']}",
+                            "Subagent'ın tool sonuçları yalnızca onun context'ine girer, ana konuşmaya girmez.",
                             [{"etiket": "Aracın döndürdüğü", "metin": kes(res, 1500)}], "arac", ti + 0.3)
                 if text:
-                    add("llm", "agent", 4, "yanıt metni", "Alt agent'ın LLM'i metinle yanıt verir",
-                        "Alt agent'ın son yanıtı onun sonucudur. Ana LLM bunu doğrudan görmez; sonuç ana bağlama ayrıca aktarılır.",
+                    add("llm", "agent", 4, "yanıt metni", "Subagent'ın LLM'i metinle yanıt verir",
+                        "Subagent'ın son yanıtı onun sonucudur. Ana LLM bunu doğrudan görmez; sonuç ana context'e ayrıca aktarılır.",
                         [{"etiket": "Yanıt", "metin": kes(text), "vurgu": True}], "donus", ti + 0.4)
             for e in aev:
                 if e["type"] == "subagent.failed":
                     fd = e["data"]
                     neden = MODEL_SECIMI.get(fd.get("modelSelectionSource"), "")
-                    add("agent", "cli", 2, "başarısız", f"Alt agent başarısız oldu: {ad}",
-                        "Alt agent işini bitiremedi. Ana LLM bunu kendiliğinden öğrenmez; ancak alt agent'ın durumunu okuyunca (read_agent) görür."
+                    add("agent", "cli", 2, "başarısız", f"Subagent başarısız oldu: {ad}",
+                        "Subagent işini bitiremedi. Ana LLM bunu kendiliğinden öğrenmez; ancak subagent'ın durumunu okuyunca (read_agent) görür."
                         + (f" Model: {fd.get('model', '?')} ({neden})." if neden else ""),
                         [{"etiket": "Hata", "metin": kes(fd.get("error", "")), "vurgu": True}], "donus", idx[id(e)])
                 elif e["type"] == "subagent.completed":
                     cd = e["data"]
                     satir = [["Süre", f"{tr_sayi(cd.get('durationMs', 0) / 1000, 1)} sn"],
                              ["Toplam token", f"{cd.get('totalTokens', 0):,}".replace(",", ".")],
-                             ["Araç çağrısı", str(cd.get("totalToolCalls", 0))]]
+                             ["Tool çağrısı", str(cd.get("totalToolCalls", 0))]]
                     bildirim = next((x for x in ana if x["type"] == "system.notification"
                                      and ((x["data"].get("kind") or {}).get("agentId") == aid)), None)
-                    det = [{"tur": "ozet", "etiket": "Alt agent özeti", "satirlar": satir}]
-                    acik = "Alt agent işini bitirdi. Sonucu ana LLM'e kendiliğinden gitmez."
+                    det = [{"tur": "ozet", "etiket": "Subagent özeti", "satirlar": satir}]
+                    acik = "Subagent işini bitirdi. Sonucu ana LLM'e kendiliğinden gitmez."
                     if bildirim:
-                        det.append({"etiket": "CLI'ın ana agent'a gönderdiği bildirim", "metin": kes(bildirim["data"].get("content", "")), "vurgu": True})
-                        acik += (" CLI ana agent'a bir bildirim gönderir ve siz bir şey yazmadan ana agent'ı yeniden çalıştırır; "
+                        det.append({"etiket": "Harness'ın ana agent'a gönderdiği bildirim", "metin": kes(bildirim["data"].get("content", "")), "vurgu": True})
+                        acik += (" harness ana agent'a bir bildirim gönderir ve siz bir şey yazmadan ana agent'ı yeniden çalıştırır; "
                                  "bu bildirim bir sonraki ana LLM çağrısına mesaj olarak eklenir.")
-                    add("agent", "cli", 2, "bitti", f"Alt agent bitti: {ad}", acik, det, "donus", idx[id(e)])
+                    add("agent", "cli", 2, "bitti", f"Subagent bitti: {ad}", acik, det, "donus", idx[id(e)])
 
         # CLI'ın kendisinin eklediği araç çağrıları (bildirimden sonra, LLM çağrısı olmadan)
         for e in ana:
@@ -615,8 +615,8 @@ def uret(events, aylik_kredi=None):
                 prem = (sonra[0]["data"].get("totalPremiumRequests") or 0) - ((once[-1]["data"].get("totalPremiumRequests") or 0) if once else 0)
             # nanoAIU ÷ 10⁹ = AI kredisi (GitHub Copilot SDK belgesindeki dönüşüm)
             toplam_kredi = sum(n or 0 for n in nano) / 1e9
-            satirlar = [["LLM çağrısı", str(n_llm) + (f" (+{n_alt_llm} alt agent)" if n_alt_llm else "")],
-                        ["Toplam maliyet", f"{tr_sayi(toplam_kredi)} AI kredisi (≈ {dolar(toplam_kredi)})" + (" · alt agent dahil" if n_alt_llm else "")],
+            satirlar = [["LLM çağrısı", str(n_llm) + (f" (+{n_alt_llm} subagent)" if n_alt_llm else "")],
+                        ["Toplam maliyet", f"{tr_sayi(toplam_kredi)} AI kredisi (≈ {dolar(toplam_kredi)})" + (" · subagent dahil" if n_alt_llm else "")],
                         ["Çağrı başına", " · ".join(tr_sayi((n or 0) / 1e9) + (" (alt)" if x.get("agentId") else "") for n, x in zip(nano, tum_usage)) + " AI kredisi"]]
             if aylik_kredi:
                 satirlar.append(["Aylık haktan", f"%{tr_sayi(100 * toplam_kredi / aylik_kredi, 3)} kadarı ({tr_sayi(aylik_kredi, 0)} kredilik aylık hak)"])
@@ -624,8 +624,8 @@ def uret(events, aylik_kredi=None):
                 satirlar.append(["Premium istek", f"{prem} (LLM çağrısı başına değil, prompt başına sayılır)"])
             son_det.append({"tur": "ozet", "etiket": "Bu prompt'un maliyeti", "satirlar": satirlar, "seviye": 3})
         add("cli", "user", 1, "yanıt", "Yanıt geliştiriciye gösterilir",
-            f"Bu istek için {n_llm} LLM çağrısı" + (f" (alt agent'larda {n_alt_llm} tane daha)" if n_alt_llm else "")
-            + (f" ve {n_tools} araç çağrısı" if n_tools else "") + " yapıldı.",
+            f"Bu istek için {n_llm} LLM çağrısı" + (f" (subagent'larda {n_alt_llm} tane daha)" if n_alt_llm else "")
+            + (f" ve {n_tools} tool çağrısı" if n_tools else "") + " yapıldı.",
             son_det, "ana", float("inf"))
         steps.sort(key=lambda s_: s_["_k"])
         for s_ in steps:
@@ -652,8 +652,8 @@ def main():
             n_llm = sum(1 for e in ana if e["type"] == "assistant.turn_start")
             n_tool = sum(1 for e in ana if e["type"] == "tool.execution_start")
             n_alt = sum(1 for e in p["events"] if e.get("agentId") and e["type"] == "assistant.turn_start")
-            print(f"{i:>3}. {kisalt(p['user']['data'].get('content', ''), 70)}  ·  {n_llm} LLM, {n_tool} araç"
-                  + (f" · alt agent: {n_alt} LLM" if n_alt else ""))
+            print(f"{i:>3}. {kisalt(p['user']['data'].get('content', ''), 70)}  ·  {n_llm} LLM, {n_tool} tool"
+                  + (f" · subagent: {n_alt} LLM" if n_alt else ""))
         return
     data = uret(events, a.aylik_kredi)
     for pn, t, n in data.pop("uyarilar", []):

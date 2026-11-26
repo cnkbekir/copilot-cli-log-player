@@ -91,6 +91,7 @@ Logda "LLM'e giden istek" tek bir olay olarak **yoktur**. Her `assistant.turn_st
   - Ekran okuyucuya yalnızca `#live` bölgesi bildirir ("Adım n / m: başlık"); paneli `aria-live` yapmayın.
   - `prefers-reduced-motion` desteklenir; animasyon eklerseniz ona uyun.
   - İkonlar satır içi SVG, tek ikon ailesi (Phosphor çizgi stili), emoji yok. İkon düğmelerinde `aria-label` ve gerekiyorsa `aria-pressed` zorunlu.
+- **Terimler:** Arayüz, VS Code'un kendi terimlerini kullanır: harness, tool, tool call, subagent, context, cache, system prompt, agent loop. Genel kelimeler Türkçe kalır (çağrı, maliyet, düşünce). Yeni metin eklerken bu terimleri kullanın.
 - **Türkçe metin:** Sayıya göre değişen eklerden kaçının (`%99'i` / `%99'u` yerine "%99 kadarı"). Sayılar `toLocaleString("tr-TR")` ile.
 - Başlık 1100 px üzerinde tek satıra sığmalı. `body` ızgarasındaki `grid-template-columns: minmax(0,1fr)` bunun için gerekli; kaldırırsanız sayfa yatay taşar.
 
