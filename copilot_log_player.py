@@ -604,8 +604,10 @@ def uret(events, aylik_kredi=None):
         if any(n is not None for n in nano):
             # Checkpoint, prompt'un kapanış hook'undan SONRA yazılır: prompt'un son olayından sonraki
             # ilk checkpoint bu prompt'a, kullanıcı mesajından önceki son checkpoint bir öncekine aittir.
+            # Alt agent olayları (agentId) checkpoint'ten sonra da gelebilir; onlar sayılmaz, yoksa
+            # bir sonraki prompt'un checkpoint'i alınır ve premium istek iki prompt'luk çıkar.
             cps = [e for e in events if e["type"] == "session.usage_checkpoint"]
-            son_i = max(idx[id(e)] for e in p["events"])
+            son_i = max((idx[id(e)] for e in p["events"] if not e.get("agentId")), default=user_i)
             sonra = [c for c in cps if idx[id(c)] > son_i]
             once = [c for c in cps if idx[id(c)] < user_i]
             prem = None
