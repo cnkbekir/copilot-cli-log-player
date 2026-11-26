@@ -232,6 +232,137 @@ llm_call(4, "`ui-docs` MCP'sinde aradım ve **`ConfirmDialog`** bileşenini buld
 emit("assistant.turn_end", {"turnId": "4"})
 stop()
 
+# 4) alt agent (arka planda). Olay sırası Copilot CLI 1.0.114 gerçek logundaki yapıyı taklit eder:
+#    task aracı hemen döner → ana agent turunu bitirir → alt agent kendi bağlamıyla (başka modelde) çalışır
+#    → bitince CLI bildirim gönderir, LLM'e sormadan read_agent çağırır ve ana agent için yeni tur açar.
+SUB_ID, SUB_MODEL, SUB_NAME = "todo-audit", "demo-flash", "todo-audit"
+SUB_SYSTEM = "You are a general-purpose sub-agent of Copilot CLI. Complete the task you are given and report back.\n\n" + rules("Alt agent", 70)
+sub_conv, sub_prev = 0, 0
+
+
+def sub_emit(typ, data, dt_ms=5):
+    emit(typ, data, dt_ms)
+    events[-1]["agentId"] = SUB_ID
+
+
+def sub_llm(turn, content="", tool_requests=(), out_tokens=80, think_ms=2400):
+    """Alt agent'ın LLM çağrısı: ana konuşmayı görmez, kendi sistem prompt'u ve modeli var, önbelleği sıfırdan."""
+    global sub_conv, sub_prev, total_nano
+    sub_emit("assistant.turn_start", {"turnId": str(turn), "parentToolCallId": task_id}, 3)
+    tin = round(len(SUB_SYSTEM) / CHARS_PER_TOKEN) + TOOL_TOKENS + round(sub_conv / CHARS_PER_TOKEN)
+    read = min(sub_prev, tin - 3)
+    write = tin - read - 3
+    sub_prev = tin
+    counts = {"input": 3, "cache_read": read, "cache_write": write, "output": out_tokens}
+    nano = sum(counts[k] * PRICE[k] for k in counts) // 4   # küçük model: daha ucuz
+    total_nano += nano
+    sub_emit("session.usage_record", {"usage": {
+        "model": SUB_MODEL, "inputTokens": tin, "outputTokens": out_tokens,
+        "cacheReadTokens": read, "cacheWriteTokens": write, "cacheTtlSeconds": 1800, "reasoningTokens": 30,
+        "toolTokenCount": TOOL_TOKENS, "availableToolCount": TOOL_COUNT,
+        "copilotUsage": {"totalNanoAiu": nano, "tokenDetails": [
+            {"tokenType": k, "tokenCount": v, "batchSize": 1_000_000, "costPerBatch": PRICE[k] * 250_000, "model": SUB_MODEL}
+            for k, v in counts.items()]},
+        "finishReason": "tool_calls" if tool_requests else "stop"}}, think_ms)
+    reqs = [{"toolCallId": "call_" + uuid.uuid4().hex[:24], "name": n, "arguments": a, "type": "function"} for n, a in tool_requests]
+    sub_conv += len(content) + sum(len(json.dumps(a)) for _, a in tool_requests)
+    sub_emit("assistant.message", {"messageId": str(uuid.uuid4()), "content": content, "toolRequests": reqs, "model": SUB_MODEL}, 2)
+    return reqs
+
+
+t_pad(20000)
+user("TODO yorumlarını tarayıp bir rapor hazırlaması için bir alt agent başlat")
+TASK = ("src/ altındaki tüm TODO ve FIXME yorumlarını bul. Her biri için dosya, satır ve kısa açıklama ver; "
+        "önem sırasına göre grupla. Kod değiştirme, yalnızca rapor yaz.")
+r = llm_call(0, tool_requests=[("task", {"description": "TODO raporu", "prompt": TASK, "agent_type": "general-purpose",
+                                         "name": SUB_NAME, "mode": "background"})],
+             reasoning="Kullanıcı işi bir alt agent'a vermemi istiyor. Görevi tek başına anlaşılır yazmalıyım; alt agent bu konuşmayı görmeyecek.",
+             out_tokens=120, think_ms=3000)
+task_id = r[0]["toolCallId"]
+emit("tool.execution_start", {"toolCallId": task_id, "toolName": "task", "arguments": r[0]["arguments"]}, 2)
+hook("preToolUse", {"toolCalls": [{"id": task_id, "name": "task", "args": r[0]["arguments"]}]})
+emit("subagent.started", {"toolCallId": task_id, "agentName": "general-purpose", "agentDisplayName": SUB_NAME,
+                          "agentDescription": "TODO raporu", "model": MODEL, "agentType": "general-purpose",
+                          "executionMode": "background"}, 4)
+events[-1]["agentId"] = SUB_ID
+STARTED = f"Agent started in background with agent_id: {SUB_ID}. You will be notified when it completes."
+hook("postToolUse", {"toolCallId": task_id, "toolName": "task"}, dur=1)
+emit("tool.execution_complete", {"toolCallId": task_id, "success": True, "result": {"content": STARTED}}, 2)
+conv_chars += len(STARTED)
+emit("assistant.turn_end", {"turnId": "0"})
+
+# Alt agent başlar (ana agent'ın 2. turuyla aynı anda)
+emit("assistant.turn_start", {"turnId": "1"}, 3)
+sub_emit("subagent.configured", {"model": SUB_MODEL, "contextTier": "default", "multiTurn": False})
+hook("subagentStart", {"agentId": SUB_ID, "agentType": "general-purpose", "agentName": "general-purpose"})
+sub_tr = f"<current_datetime>{t.isoformat(timespec='seconds')}</current_datetime>\n\n{TASK}"
+sub_emit("user.message", {"content": TASK, "transformedContent": sub_tr, "source": f"agent-{SUB_ID}", "parentAgentTaskId": task_id}, 3)
+sub_emit("system.message", {"role": "system", "content": SUB_SYSTEM})
+sub_conv += len(sub_tr)
+# Ana agent kısa bir yanıtla turu bitirir; alt agent arka planda çalışmaya devam eder
+# (llm_call turn_start'ı kendisi yazdığı için bu tur elle kuruldu: turn_start alt agent olaylarından önce gelmeli)
+tin = SYS_TOKENS + TOOL_TOKENS + round(conv_chars / CHARS_PER_TOKEN)
+read = min(prev_tin, tin - 3)
+write = tin - read - 3
+prev_tin = tin
+counts = {"input": 3, "cache_read": read, "cache_write": write, "output": 35}
+nano = sum(counts[k] * PRICE[k] for k in counts)
+total_nano += nano
+emit("session.usage_record", {"usage": {
+    "model": MODEL, "inputTokens": tin, "outputTokens": 35, "cacheReadTokens": read, "cacheWriteTokens": write,
+    "cacheTtlSeconds": 1800, "reasoningTokens": 10, "toolTokenCount": TOOL_TOKENS, "availableToolCount": TOOL_COUNT,
+    "copilotUsage": {"totalNanoAiu": nano, "tokenDetails": [
+        {"tokenType": k, "tokenCount": v, "batchSize": 1_000_000, "costPerBatch": PRICE[k] * 1_000_000, "model": MODEL}
+        for k, v in counts.items()]}, "finishReason": "stop"}}, 1500)
+WAIT = f"`{SUB_NAME}` alt agent'ını arka planda başlattım. Bitince sonucu özetleyeceğim."
+emit("assistant.message", {"messageId": str(uuid.uuid4()), "content": WAIT, "toolRequests": [], "model": MODEL}, 2)
+conv_chars += len(WAIT)
+emit("assistant.turn_end", {"turnId": "1"})
+hook("agentStop", {"stopReason": "end_turn"})
+
+# Alt agent'ın kendi döngüsü: bir araç, sonra rapor
+r = sub_llm(0, tool_requests=[("bash", {"command": "grep -rn 'TODO\\|FIXME' src/", "description": "Find TODO comments"})], out_tokens=60)
+GREP = ("src/store.ts:41:  // TODO: localStorage hatasını kullanıcıya göster\n"
+        "src/api/client.ts:17:  // FIXME: zaman aşımı sabit 30 sn, ayarlanabilir olmalı\n"
+        "src/components/TodoList.tsx:88:  // TODO: boş liste için ayrı bir görünüm\n"
+        "src/utils/date.ts:9:  // TODO: saat dilimi testleri eksik")
+sub_emit("tool.execution_start", {"toolCallId": r[0]["toolCallId"], "toolName": "bash", "arguments": r[0]["arguments"]}, 2)
+hook("preToolUse", {"toolCalls": [{"id": r[0]["toolCallId"], "name": "bash", "args": r[0]["arguments"]}]})
+events[-2]["agentId"] = events[-1]["agentId"] = SUB_ID
+t_pad(400)
+hook("postToolUse", {"toolCallId": r[0]["toolCallId"], "toolName": "bash"}, dur=1)
+events[-2]["agentId"] = events[-1]["agentId"] = SUB_ID
+sub_emit("tool.execution_complete", {"toolCallId": r[0]["toolCallId"], "success": True, "result": {"content": GREP}}, 2)
+sub_conv += len(GREP)
+sub_emit("assistant.turn_end", {"turnId": "0", "parentToolCallId": task_id})
+REPORT = ("## TODO raporu (4 kayıt)\n\n**Önemli**\n- `src/api/client.ts:17`: zaman aşımı sabit (FIXME)\n- `src/store.ts:41`: localStorage hatası kullanıcıya gösterilmiyor\n\n"
+          "**Sonra**\n- `src/utils/date.ts:9`: saat dilimi testleri eksik\n- `src/components/TodoList.tsx:88`: boş liste görünümü")
+sub_llm(1, REPORT, out_tokens=160, think_ms=3200)
+sub_emit("assistant.turn_end", {"turnId": "1", "parentToolCallId": task_id})
+sub_emit("subagent.completed", {"toolCallId": task_id, "agentName": "general-purpose", "agentDisplayName": SUB_NAME,
+                                "model": MODEL, "firstDispatchedModel": SUB_MODEL, "totalToolCalls": 1, "durationMs": 6500})
+emit("session.usage_checkpoint", {"totalNanoAiu": total_nano, "totalPremiumRequests": premium,
+                                  "modelCacheState": [{"modelId": MODEL, "cacheTtlSeconds": 1800}]})
+hook("subagentStop", {"agentId": SUB_ID, "agentName": "general-purpose", "agentType": "general-purpose", "stopReason": "end_turn"})
+
+# CLI ana agent'ı kendisi uyandırır: bildirim + LLM'e sormadan read_agent
+hook("userPromptSubmitted", {"prompt": ""})
+NOTE = f"<system_notification>Agent \"{SUB_NAME}\" (general-purpose) has completed. Use read_agent to get the result.</system_notification>"
+emit("system.notification", {"content": NOTE, "kind": {"type": "agent_idle", "agentId": SUB_ID, "agentType": "general-purpose",
+                                                        "displayName": SUB_NAME, "description": "TODO raporu"}}, 4)
+conv_chars += len(NOTE)
+ra = {"toolCallId": str(uuid.uuid4()), "name": "read_agent", "arguments": {"agent_id": SUB_ID, "since_turn": 0}}
+emit("assistant.message", {"messageId": str(uuid.uuid4()), "content": "", "toolRequests": [ra]}, 2)
+emit("tool.execution_start", {"toolCallId": ra["toolCallId"], "toolName": "read_agent", "arguments": ra["arguments"]}, 2)
+emit("tool.execution_complete", {"toolCallId": ra["toolCallId"], "success": True, "result": {"content": REPORT}}, 3)
+conv_chars += len(REPORT)
+llm_call(0, "Alt agent raporu bitirdi: **4 TODO/FIXME** var. En önemlisi `src/api/client.ts:17`'deki sabit zaman aşımı. "
+            "İstersen önce onu düzelteyim.", out_tokens=70, think_ms=2200)
+emit("assistant.turn_end", {"turnId": "0"})
+hook("agentStop", {"stopReason": "end_turn"})
+emit("session.usage_checkpoint", {"totalNanoAiu": total_nano, "totalPremiumRequests": premium + 1,
+                                  "modelCacheState": [{"modelId": MODEL, "cacheTtlSeconds": 1800}]})
+
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo-events.jsonl")
 with open(out, "w", encoding="utf-8") as f:
     for e in events:
